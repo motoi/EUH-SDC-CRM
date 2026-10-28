@@ -1,4 +1,5 @@
 // 操作確認用のダミーデータ。実在の人物・組織ではない。アドレスは example.com / example.jp（送信されない予約ドメイン）のみ。
+// 項目は事務局の Excel の列（氏名・企業・団体名・部署・役職・メールアドレス・団体所在地・企業分類1・企業分類2・興味分類）に合わせる。
 // scripts/seed.js（Node）と確認用サイト（ブラウザ）の両方から使う
 import { normalizeOrg } from './routes/contacts.js';
 
@@ -8,12 +9,20 @@ export async function seed(q) {
   const pick = (a) => a[Math.floor(rnd() * a.length)];
   const chance = (p) => rnd() < p;
 
-  const LAST = [['佐藤', 'さとう'], ['鈴木', 'すずき'], ['高橋', 'たかはし'], ['田中', 'たなか'], ['伊藤', 'いとう'], ['渡辺', 'わたなべ'], ['山本', 'やまもと'], ['中村', 'なかむら'], ['小林', 'こばやし'], ['加藤', 'かとう'], ['吉田', 'よしだ'], ['山田', 'やまだ'], ['松本', 'まつもと'], ['井上', 'いのうえ'], ['木村', 'きむら'], ['林', 'はやし'], ['清水', 'しみず'], ['森', 'もり'], ['池田', 'いけだ'], ['橋本', 'はしもと'], ['藤井', 'ふじい'], ['岡田', 'おかだ'], ['村上', 'むらかみ'], ['原田', 'はらだ']];
-  const FIRST = [['大輔', 'だいすけ'], ['健太', 'けんた'], ['翔', 'しょう'], ['直樹', 'なおき'], ['陽子', 'ようこ'], ['美穂', 'みほ'], ['恵', 'めぐみ'], ['亮', 'りょう'], ['真由美', 'まゆみ'], ['誠', 'まこと'], ['由紀', 'ゆき'], ['拓也', 'たくや'], ['彩', 'あや'], ['浩二', 'こうじ'], ['裕子', 'ゆうこ'], ['隆', 'たかし']];
-  // 実在の組織と取り違えないよう、地名などは使わず「サンプル」を付けた架空の名前にする
-  const ORG_PREFIX = ['サンプルA', 'サンプルB', 'サンプルC', 'サンプルD', 'サンプルE', 'サンプルF', 'サンプルG', 'サンプルH', 'サンプルI', 'サンプルJ', 'サンプルK', 'サンプルL'];
-  const ORG_SUFFIX = [['精機', '企業', '製造業'], ['テック', '企業', '情報通信'], ['物産', '企業', '卸売'], ['建設', '企業', '建設'], ['フーズ', '企業', '食品'], ['銀行', '企業', '金融'], ['市役所（架空）', '行政・自治体', '行政'], ['まちづくり協議会', 'NPO・団体', '地域団体'], ['総合研究所', '大学・研究機関', '研究']];
-  const TITLES = [['代表取締役', '経営者・役員'], ['取締役', '経営者・役員'], ['部長', '部長クラス'], ['事業部長', '部長クラス'], ['課長', '課長クラス'], ['マネージャー', '課長クラス'], ['主任', '担当者'], ['担当', '担当者']];
+  const LAST = ['佐藤', '鈴木', '高橋', '田中', '伊藤', '渡辺', '山本', '中村', '小林', '加藤', '吉田', '山田', '松本', '井上', '木村', '林', '清水', '森', '池田', '橋本', '藤井', '岡田', '村上', '原田'];
+  const FIRST = ['大輔', '健太', '翔', '直樹', '陽子', '美穂', '恵', '亮', '真由美', '誠', '由紀', '拓也', '彩', '浩二', '裕子', '隆'];
+  // 実在の組織と取り違えないよう、すべて「サンプル」を付けた架空の名前にする
+  const ORGS = [
+    ['株式会社サンプル自動車', '大企業', '自動車'], ['サンプル電力株式会社', '大企業', '電力'], ['株式会社サンプル精機', '中堅企業', '精密機器'],
+    ['サンプル交通株式会社', '大企業', '鉄道・バス'], ['サンプルキャピタル株式会社', '中堅企業', 'その他金融'], ['株式会社サンプルコンサルティング', '中小企業', 'サービス'],
+    ['株式会社サンプルデザイン', '小規模事業者', 'サービス'], ['株式会社サンプル部品', '中小企業', '自動車'], ['サンプル総研株式会社', '中堅企業', 'サービス'],
+    ['株式会社サンプル旅行', '大企業', 'サービス'], ['サンプル福祉株式会社', '中小企業', 'サービス'], ['サンプル学園', '教育機関', '教育'],
+    ['サンプル大学', '教育機関', '教育'], ['株式会社サンプルラボ', '小規模事業者', '情報通信'], ['サンプルシステムズ株式会社', '中堅企業', '情報通信'],
+  ];
+  const LOCATIONS = ['広島県広島市中区', '広島県広島市南区', '広島県広島市東区', '広島県安芸郡府中町', '広島県東広島市', '広島県福山市', '岡山県岡山市北区', '東京都港区', '東京都中央区'];
+  const DEPTS = ['経営企画部', '新規事業開発室', '人事部', '研究開発本部', '営業部', 'デザイン本部', '地域共創本部', '購買本部', null];
+  const TITLES = ['代表取締役', '部長', '課長', 'マネージャー', '主任', '一般', '主査', '支店長', null];
+  const INTERESTS = ['新規事業', 'リベラルアーツ', 'DX', '人材育成', '組織開発', 'ソーシャルデザイン', '地域共創', 'サステナビリティ'];
   const FACULTY = ['教員A', '教員B', '教員C', '教員D'];
 
   await q(`insert into staff_users (entra_object_id, name, email, role) values
@@ -21,41 +30,34 @@ export async function seed(q) {
     ('dev-2', '事務スタッフB', 'staff-b@example.jp', 'operator'),
     ('dev-3', '管理者', 'admin@example.jp', 'admin')`);
 
-  const interests = ['DX・デジタル活用', '組織開発', '人材育成', 'ソーシャルデザイン', '地域創生', 'ファイナンス', 'マーケティング', '事業承継'];
-  for (const [i, name] of interests.entries()) await q(`insert into interests (name, sort_order) values ($1, $2)`, [name, i + 1]);
+  for (const [i, name] of INTERESTS.entries()) await q(`insert into interests (name, sort_order) values ($1, $2)`, [name, i + 1]);
 
+  // [名称, 種類, 開催日, 形式, 参加者に付けやすい興味分類]
   const events = [
-    ['DX推進セミナー 2025', 'セミナー', '2025-06-14', 'ハイブリッド', [1, 7]],
-    ['組織開発ワークショップ', 'ワークショップ', '2025-09-20', '対面', [2, 3]],
-    ['ソーシャルデザイン・シンポジウム', 'シンポジウム', '2025-12-06', '対面', [4, 5]],
-    ['経営者向け 事業承継講座', '講座', '2026-02-21', 'オンライン', [8, 6]],
-    ['地域企業交流会 2026春', '交流会', '2026-05-16', '対面', [5]],
-    ['DX推進セミナー 2026', 'セミナー', '2026-07-11', 'ハイブリッド', [1, 3]],
+    ['DX推進セミナー 2025', 'セミナー', '2025-06-14', 'ハイブリッド', [3, 1]],
+    ['組織開発ワークショップ', 'ワークショップ', '2025-09-20', '対面', [5, 4]],
+    ['ソーシャルデザイン・シンポジウム', 'シンポジウム', '2025-12-06', '対面', [6, 7]],
+    ['リベラルアーツ公開講座', '講座', '2026-02-21', 'オンライン', [2]],
+    ['地域企業交流会 2026春', '交流会', '2026-05-16', '対面', [7, 1]],
+    ['新規事業創出プログラム 説明会', 'セミナー', '2026-07-11', 'ハイブリッド', [1, 8]],
   ];
   for (const [name, kind, held_on, format] of events) await q(`insert into events (name, kind, held_on, format) values ($1,$2,$3,$4)`, [name, kind, held_on, format]);
 
   const orgIds = [];
-  for (const pre of ORG_PREFIX) {
-    for (const [suf, type, ind] of [pick(ORG_SUFFIX), pick(ORG_SUFFIX)]) {
-      const name = type === '企業' && chance(0.6) ? `株式会社${pre}${suf}` : `${pre}${suf}`;
-      const [o] = await q(`insert into organizations (name, normalized_name, org_type, industry, prefecture) values ($1,$2,$3,$4,'（架空）')
-        on conflict do nothing returning id`, [name, normalizeOrg(name), type, ind]);
-      if (o) orgIds.push(o.id);
-    }
+  for (const [name, size, industry] of ORGS) {
+    const [o] = await q(`insert into organizations (name, normalized_name, location, size_class, industry) values ($1,$2,$3,$4,$5) returning id`,
+      [name, normalizeOrg(name), pick(LOCATIONS), size, industry]);
+    orgIds.push(o.id);
   }
 
   const used = new Set();
   for (let i = 1; i <= 320; i++) {
-    const [ln, lk] = pick(LAST), [fn, fk] = pick(FIRST);
-    const [title, level] = pick(TITLES);
-    const org = pick(orgIds);
-    let email = `${fk.length > 3 ? 'user' : 'c'}${i}@${pick(['example.com', 'example.jp'])}`;
+    let email = `user${i}@${pick(['example.com', 'example.jp'])}`;
     if (chance(0.03)) email = null;
     if (email && used.has(email)) continue;
     used.add(email);
-    const type = chance(0.85) ? '企業' : pick(['教員', '学生・修了生', '行政', 'その他']);
-    const [c] = await q(`insert into contacts (email, last_name, first_name, last_name_kana, first_name_kana, organization_id, job_title, job_level, contact_type)
-      values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id`, [email, ln, fn, lk, fk, org, title, level, type]);
+    const [c] = await q(`insert into contacts (full_name, email, organization_id, department, job_title) values ($1,$2,$3,$4,$5) returning id`,
+      [`${pick(LAST)} ${pick(FIRST)}`, email, pick(orgIds), pick(DEPTS), pick(TITLES)]);
 
     const viaCard = chance(0.55);
     await q(`insert into contact_sources (contact_id, source_kind, source_detail, consent_basis, acquired_on) values ($1,$2,$3,$4,$5)`,
@@ -71,11 +73,11 @@ export async function seed(q) {
         }
       }
     }
-    if (chance(0.2)) await q(`insert into contact_interests (contact_id, interest_id, origin) values ($1,$2,'self_reported') on conflict do nothing`, [c.id, 1 + Math.floor(rnd() * interests.length)]);
+    if (chance(0.3)) await q(`insert into contact_interests (contact_id, interest_id, origin) values ($1,$2,'self_reported') on conflict do nothing`, [c.id, 1 + Math.floor(rnd() * INTERESTS.length)]);
     if (email && chance(0.03)) await q(`insert into suppressions (email, reason) values ($1, $2)`, [email, pick(['unsubscribe', 'hard_bounce'])]);
   }
 
   await q(`insert into segments (name, definition, created_by) values
-    ('DXセミナー参加者', $1, 3), ('経営層（全体）', $2, 3)`,
-    [JSON.stringify({ events: [1, 6], event_status: ['attended'] }), JSON.stringify({ job_levels: ['経営者・役員'] })]);
+    ('DXセミナー参加者', $1, 3), ('新規事業に関心のある大企業・中堅企業', $2, 3)`,
+    [JSON.stringify({ events: [1], event_status: ['attended'] }), JSON.stringify({ interests: [1], size_classes: ['大企業', '中堅企業'] })]);
 }

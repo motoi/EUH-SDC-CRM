@@ -30,7 +30,8 @@ app.get('/', async (c) => {
     <div><button class="sub">イベントを追加</button></div>
   </form>
 </div>
-<div class="card"><h2>興味関心</h2>
+<div class="card"><h2>興味分類</h2>
+  <p class="small muted" style="margin:0">連絡先の「興味分類」にカンマ区切りで書くと、新しい単語は自動でここに加わります。</p>
   <div class="checks">${interests.map((i) => html`<span class="pill info">${i.name} ${i.n}人</span>`)}</div>
   <form method="post" action="/masters/interests" class="row">
     <label style="flex:1 1 240px">新しい興味<input type="text" id="int_name" name="name" required placeholder="例：地域創生"></label>

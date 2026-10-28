@@ -7,7 +7,8 @@ import { createApp } from '../src/app.js';
 import { seed } from '../src/seed-data.js';
 import { start as startSender } from '../src/sender.js';
 
-const DB = 'sdc-demo-v1';
+// スキーマを変えたら番号を上げる（前の版のデータを持っている人も、新しい形で作り直される）
+const DB = 'sdc-demo-v2';
 const JAR_KEY = 'sdc-demo-cookies';
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },

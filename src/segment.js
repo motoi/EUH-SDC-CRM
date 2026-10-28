@@ -2,13 +2,20 @@
 // 同じ項目の中は「どれか」（OR）、項目どうしは「すべて」（AND）。
 import { q } from './db.js';
 
-export const JOB_LEVELS = ['経営者・役員', '部長クラス', '課長クラス', '担当者', '教員・研究者', '学生', 'その他'];
-export const CONTACT_TYPES = ['企業', '教員', '学生・修了生', '行政', 'その他'];
-export const ORG_TYPES = ['企業', '大学・研究機関', '行政・自治体', 'NPO・団体', 'その他'];
+// 企業分類1（Excel の列と同じ区分）
+export const SIZE_CLASSES = ['大企業', '中堅企業', '中小企業', '小規模事業者', '教育機関', 'その他'];
 export const PART_STATUS = { applied: '申込', attended: '参加', absent: '欠席', cancelled: 'キャンセル' };
 
+// 団体所在地の先頭から都道府県を取り出す SQL（例: 広島県広島市中区 → 広島県）
+export const PREF_SQL = `substring(o.location from '^(東京都|北海道|(?:京都|大阪)府|.{2,3}県)')`;
+
 const ids = (v) => [].concat(v ?? []).map(Number).filter(Number.isInteger);
-const strs = (v, allowed) => [].concat(v ?? []).map(String).filter((s) => allowed.includes(s));
+const strs = (v, allowed) => [].concat(v ?? []).map(String).filter((s) => !allowed || allowed.includes(s));
+
+// 興味分類の入力（「新規事業,リベラルアーツ」）を単語に分ける。全角・読点区切りも受け付ける
+export function splitInterests(text) {
+  return [...new Set(String(text ?? '').normalize('NFKC').split(/[,、]/).map((s) => s.trim()).filter(Boolean))];
+}
 
 // フォーム（parseBody の結果）→ 定義
 export function fromForm(body) {
@@ -17,9 +24,9 @@ export function fromForm(body) {
     events: ids(pick('events')),
     event_status: strs(pick('event_status'), Object.keys(PART_STATUS)),
     interests: ids(pick('interests')),
-    job_levels: strs(pick('job_levels'), JOB_LEVELS),
-    contact_types: strs(pick('contact_types'), CONTACT_TYPES),
-    org_types: strs(pick('org_types'), ORG_TYPES),
+    size_classes: strs(pick('size_classes'), SIZE_CLASSES),
+    industries: strs(pick('industries')),
+    prefectures: strs(pick('prefectures')),
     exclude_events: ids(pick('exclude_events')),
   };
   if (def.events.length && !def.event_status.length) def.event_status = ['attended'];
@@ -31,6 +38,7 @@ export function toSql(def = {}) {
   const where = [];
   const params = [];
   const p = (v) => { params.push(v); return `$${params.length}`; };
+  const org = (cond) => `exists (select 1 from organizations o where o.id = c.organization_id and ${cond})`;
 
   if (def.events?.length) {
     where.push(`exists (select 1 from event_participations ep where ep.contact_id = c.id
@@ -39,11 +47,9 @@ export function toSql(def = {}) {
   if (def.interests?.length) {
     where.push(`exists (select 1 from contact_interests ci where ci.contact_id = c.id and ci.interest_id = any(${p(def.interests)}::bigint[]))`);
   }
-  if (def.job_levels?.length) where.push(`c.job_level = any(${p(def.job_levels)}::text[])`);
-  if (def.contact_types?.length) where.push(`c.contact_type = any(${p(def.contact_types)}::text[])`);
-  if (def.org_types?.length) {
-    where.push(`exists (select 1 from organizations o where o.id = c.organization_id and o.org_type = any(${p(def.org_types)}::text[]))`);
-  }
+  if (def.size_classes?.length) where.push(org(`o.size_class = any(${p(def.size_classes)}::text[])`));
+  if (def.industries?.length) where.push(org(`o.industry = any(${p(def.industries)}::text[])`));
+  if (def.prefectures?.length) where.push(org(`${PREF_SQL} = any(${p(def.prefectures)}::text[])`));
   if (def.exclude_events?.length) {
     where.push(`not exists (select 1 from event_participations ep where ep.contact_id = c.id
       and ep.event_id = any(${p(def.exclude_events)}::bigint[]) and ep.status in ('applied', 'attended'))`);
@@ -59,9 +65,18 @@ export async function count(def) {
 
 export async function members(def, { limit = 1000000, offset = 0 } = {}) {
   const { where, params } = toSql(def);
-  return q(`select c.id, c.email, c.last_name, c.first_name, c.job_title, o.name as org_name
+  return q(`select c.id, c.email, c.full_name, c.department, c.job_title, o.name as org_name
     from sendable_contacts c left join organizations o on o.id = c.organization_id
-    where ${where} order by c.last_name_kana nulls last, c.id limit ${Number(limit)} offset ${Number(offset)}`, params);
+    where ${where} order by o.name nulls last, c.full_name, c.id limit ${Number(limit)} offset ${Number(offset)}`, params);
+}
+
+// 条件の選択肢のうち、データから決まるもの（企業分類2・所在地の都道府県）
+export async function choices() {
+  const [industries, prefectures] = await Promise.all([
+    q(`select distinct industry v from organizations where industry is not null order by 1`),
+    q(`select distinct ${PREF_SQL} v from organizations o where o.location is not null order by 1`),
+  ]);
+  return { industries: industries.map((r) => r.v), prefectures: prefectures.map((r) => r.v).filter(Boolean) };
 }
 
 // 人が読める条件の説明（一覧や確認画面で表示する）
@@ -73,11 +88,11 @@ export async function describe(def = {}) {
   }
   if (def.interests?.length) {
     const it = await q(`select name from interests where id = any($1::bigint[]) order by sort_order, id`, [def.interests]);
-    parts.push(`興味：${it.map((i) => i.name).join('・')}`);
+    parts.push(`興味分類：${it.map((i) => i.name).join('・')}`);
   }
-  if (def.job_levels?.length) parts.push(`役職：${def.job_levels.join('・')}`);
-  if (def.contact_types?.length) parts.push(`種別：${def.contact_types.join('・')}`);
-  if (def.org_types?.length) parts.push(`組織：${def.org_types.join('・')}`);
+  if (def.size_classes?.length) parts.push(`企業分類1：${def.size_classes.join('・')}`);
+  if (def.industries?.length) parts.push(`企業分類2：${def.industries.join('・')}`);
+  if (def.prefectures?.length) parts.push(`団体所在地：${def.prefectures.join('・')}`);
   if (def.exclude_events?.length) {
     const ev = await q(`select name from events where id = any($1::bigint[])`, [def.exclude_events]);
     parts.push(`除外：「${ev.map((e) => e.name).join('」「')}」の申込・参加者`);

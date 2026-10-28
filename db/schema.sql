@@ -23,15 +23,14 @@ create table staff_users (
 );
 
 -- ───────────────────────────────── 連絡先
+-- 列の名前は、事務局で使っている Excel（氏名・企業・団体名・部署・役職・メールアドレス・団体所在地・企業分類1・企業分類2・興味分類）に合わせる
 create table organizations (
   id               bigint generated always as identity primary key,
-  name             text not null,
-  name_kana        text,
+  name             text not null,                 -- 企業・団体名
   normalized_name  text not null,                 -- 株式会社・(株)・全半角などを揃えた名寄せ用キー
-  org_type         text check (org_type in ('企業', '大学・研究機関', '行政・自治体', 'NPO・団体', 'その他')),
-  industry         text,                          -- 業種
-  employee_band    text,                          -- 従業員規模（例: '1-49', '50-299', '300-999', '1000+'）
-  prefecture       text,
+  location         text,                          -- 団体所在地（例: 広島県広島市中区）
+  size_class       text check (size_class in ('大企業', '中堅企業', '中小企業', '小規模事業者', '教育機関', 'その他')),  -- 企業分類1
+  industry         text,                          -- 企業分類2（例: 自動車、電力、サービス）
   created_at       timestamptz not null default now(),
   updated_at       timestamptz not null default now()
 );
@@ -39,18 +38,11 @@ create index organizations_normalized_name_idx on organizations (normalized_name
 
 create table contacts (
   id               bigint generated always as identity primary key,
-  email            citext,                        -- 名刺にアドレスがない人もいるので null 可
-  last_name        text not null,
-  first_name       text,
-  last_name_kana   text,
-  first_name_kana  text,
+  full_name        text not null,                 -- 氏名
+  email            citext,                        -- メールアドレス。名刺にない人もいるので null 可
   organization_id  bigint references organizations (id),
   department       text,                          -- 部署
-  job_title        text,                          -- 名刺どおりの役職
-  job_level        text check (job_level in ('経営者・役員', '部長クラス', '課長クラス', '担当者', '教員・研究者', '学生', 'その他')),
-  contact_type     text check (contact_type in ('企業', '教員', '学生・修了生', '行政', 'その他')),
-  prefecture       text,
-  phone            text,
+  job_title        text,                          -- 役職（名刺どおり）
   notes            text,
   merged_into_id   bigint references contacts (id),  -- 名寄せで統合された側はここに統合先を入れて残す
   archived_at      timestamptz,                   -- 退職・不要などで一覧から外したもの
@@ -119,7 +111,7 @@ create index event_participations_event_idx on event_participations (event_id, s
 -- ───────────────────────────────── 興味関心
 create table interests (
   id               bigint generated always as identity primary key,
-  name             text unique not null,          -- 例: DX、組織開発、ソーシャルデザイン
+  name             text unique not null,          -- 興味分類の単語（例: 新規事業、リベラルアーツ）
   category         text,
   sort_order       integer not null default 0,
   active           boolean not null default true
@@ -232,12 +224,12 @@ where c.email is not null
   );
 
 -- セグメント定義の例（segments.definition）
--- 「2025年度のDXセミナーに参加し、興味に『組織開発』を持つ、経営者・役員か部長クラス」
+-- 「2025年度のDXセミナーに参加し、興味分類に『新規事業』を持つ、大企業か中堅企業の人」
 -- {
 --   "all": [
 --     {"field": "event", "event_ids": [12], "status": ["attended"]},
 --     {"field": "interest", "interest_ids": [3]},
---     {"field": "job_level", "in": ["経営者・役員", "部長クラス"]}
+--     {"field": "size_class", "in": ["大企業", "中堅企業"]}
 --   ],
 --   "none": [
 --     {"field": "event", "event_ids": [15], "status": ["applied", "attended"]}

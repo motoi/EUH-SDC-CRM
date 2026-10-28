@@ -2,9 +2,9 @@
 import { config } from './config.js';
 
 export const MERGE_FIELDS = {
-  '{{氏名}}': (c) => [c.last_name, c.first_name].filter(Boolean).join(' '),
-  '{{姓}}': (c) => c.last_name ?? '',
-  '{{所属}}': (c) => c.org_name ?? '',
+  '{{氏名}}': (c) => c.full_name ?? '',
+  '{{企業・団体名}}': (c) => c.org_name ?? '',
+  '{{部署}}': (c) => c.department ?? '',
   '{{役職}}': (c) => c.job_title ?? '',
 };
 

@@ -5,3 +5,9 @@ node_modules/
 site/
 .claude/
 .DS_Store
+
+# 実データ・サンプルデータは絶対にコミットしない
+サンプルデータ/
+*.xlsx
+*.xls
+*.csv

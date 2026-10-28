@@ -53,7 +53,7 @@ function steps(status) {
 
 async function sampleContact(def) {
   const [m] = await members(def ?? {}, { limit: 1 });
-  return m ?? { last_name: '山田', first_name: '太郎', org_name: '株式会社サンプル', job_title: '部長' };
+  return m ?? { full_name: 'サンプル 太郎', org_name: '株式会社サンプル', department: '新規事業部', job_title: '部長' };
 }
 
 app.get('/new', async (c) => form(c, null));
@@ -127,7 +127,7 @@ ${steps(cp.status)}
 
 <div class="grid2" style="grid-template-columns:minmax(0,3fr) minmax(260px,2fr);align-items:start">
 <div class="card"><h2>届くメールの見本</h2>
-  <div class="small muted">差出人：${cp.from_address}　／　見本の宛先：${sample.last_name} ${sample.first_name ?? ''} さん</div>
+  <div class="small muted">差出人：${cp.from_address}　／　見本の宛先：${sample.full_name} さん</div>
   <div><b>件名：</b>${preview.subject}</div>
   <pre class="mail">${preview.text}</pre>
 </div>

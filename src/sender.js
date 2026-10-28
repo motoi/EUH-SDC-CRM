@@ -20,7 +20,7 @@ export async function tick() {
 
     if (budget > 0) {
       const batch = await q(`select d.id, d.email, d.unsubscribe_token, d.attempts, d.contact_id, cp.id campaign_id, cp.subject, cp.body_text,
-          c.last_name, c.first_name, c.job_title, o.name org_name
+          c.full_name, c.department, c.job_title, o.name org_name
         from deliveries d join campaigns cp on cp.id = d.campaign_id
         left join contacts c on c.id = d.contact_id left join organizations o on o.id = c.organization_id
         where d.status = 'queued' and cp.status = 'sending' order by d.id limit ${budget}`);

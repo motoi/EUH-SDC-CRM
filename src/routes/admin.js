@@ -19,7 +19,7 @@ const REASON = { unsubscribe: '本人が配信停止', hard_bounce: '宛先不�
 app.get('/', async (c) => {
   const [users, sups, logs] = await Promise.all([
     q(`select * from staff_users order by id`),
-    q(`select s.*, c.id contact_id, c.last_name, c.first_name from suppressions s
+    q(`select s.*, c.id contact_id, c.full_name from suppressions s
        left join contacts c on c.email = s.email and c.merged_into_id is null order by s.created_at desc limit 100`),
     q(`select a.*, u.name from audit_log a left join staff_users u on u.id = a.actor_id order by a.at desc limit 100`),
   ]);
@@ -53,7 +53,7 @@ app.get('/', async (c) => {
 <div class="card"><h2>配信停止中のアドレス</h2>
   <p class="small muted" style="margin:0">本人から「また案内がほしい」と連絡があったときだけ解除します。宛先不明のアドレスは、正しいアドレスに直してから解除してください。</p>
   ${sups.length ? html`<div class="scroll"><table><thead><tr><th>アドレス</th><th>理由</th><th>日時</th><th></th></tr></thead><tbody>
-  ${sups.map((s) => html`<tr><td class="small">${s.email}${s.contact_id ? html`<div><a href="/contacts/${s.contact_id}">${s.last_name} ${s.first_name ?? ''}</a></div>` : ''}</td>
+  ${sups.map((s) => html`<tr><td class="small">${s.email}${s.contact_id ? html`<div><a href="/contacts/${s.contact_id}">${s.full_name}</a></div>` : ''}</td>
     <td class="small">${REASON[s.reason]}</td><td class="small">${fmtDate(s.created_at)}</td>
     <td><form method="post" action="/admin/suppressions/lift"><input type="hidden" name="email" value="${s.email}"><button class="link">解除する</button></form></td></tr>`)}
   </tbody></table></div>` : html`<p class="muted">ありません。</p>`}

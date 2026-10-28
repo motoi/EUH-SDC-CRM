@@ -14,7 +14,7 @@ const app = createApp();
 await q(`insert into staff_users (entra_object_id, name, email) values ('t', 'テスト担当', 'staff@example.jp')`);
 await q(`insert into events (name, held_on) values ('セミナーA', '2026-01-01')`);
 for (const [email, basis] of [['a@example.com', 'opt_in'], ['b@example.com', 'business_card'], ['c@example.com', 'unknown'], ['d@example.com', 'opt_in']]) {
-  const r = await one(`insert into contacts (email, last_name, first_name) values ($1, '試験', $2) returning id`, [email, email[0]]);
+  const r = await one(`insert into contacts (email, full_name) values ($1, $2) returning id`, [email, `試験 ${email[0]}`]);
   await q(`insert into contact_sources (contact_id, source_kind, consent_basis) values ($1, '手入力', $2)`, [r.id, basis]);
   if (email !== 'd@example.com') await q(`insert into event_participations (contact_id, event_id, status) values ($1, 1, 'attended')`, [r.id]);
 }
@@ -90,4 +90,23 @@ test('管理画面は管理者だけが開ける', async () => {
   assert.equal((await req('/admin')).status, 200);
   await req('/admin/suppressions/lift', { email: 'b@example.com' });
   assert.equal(await one(`select 1 from suppressions where email = 'b@example.com'`), undefined);
+});
+
+test('興味分類はカンマ区切りで入力でき、新しい単語は興味の一覧に加わる', async () => {
+  await req('/login', { id: '1' });
+  const res = await req('/contacts', {
+    full_name: 'サンプル 花子', org_name: '株式会社サンプル商事', department: '新規事業部', job_title: '部長', email: 'hanako@example.jp',
+    location: '広島県広島市中区', size_class: '中堅企業', industry: 'サービス', interests: '新規事業,リベラルアーツ、 新規事業',
+    source_kind: '名刺交換', consent_basis: 'business_card',
+  });
+  const id = res.headers.get('location').split('/').pop();
+  const names = await q(`select i.name from contact_interests ci join interests i on i.id = ci.interest_id where ci.contact_id = $1 order by i.name`, [id]);
+  assert.deepEqual(names.map((n) => n.name), ['リベラルアーツ', '新規事業']);
+  const org = await one(`select size_class, industry, location from organizations where name = '株式会社サンプル商事'`);
+  assert.deepEqual(org, { size_class: '中堅企業', industry: 'サービス', location: '広島県広島市中区' });
+
+  // 企業分類1・企業分類2・所在地（都道府県）・興味分類で絞り込める
+  const ints = await q(`select id from interests where name = '新規事業'`);
+  const cnt = await (await req('/segments/count', { interests: String(ints[0].id), size_classes: '中堅企業', industries: 'サービス', prefectures: '広島県' })).json();
+  assert.equal(cnt.n, 1);
 });

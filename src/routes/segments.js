@@ -3,7 +3,7 @@ import { html, raw } from 'hono/html';
 import { q, one } from '../db.js';
 import { page, setFlash, takeFlash, fmtDay } from '../layout.js';
 import { audit } from '../auth.js';
-import { fromForm, count, members, describe, JOB_LEVELS, CONTACT_TYPES, ORG_TYPES, PART_STATUS } from '../segment.js';
+import { fromForm, count, members, describe, choices, SIZE_CLASSES, PART_STATUS } from '../segment.js';
 
 const app = new Hono();
 
@@ -25,9 +25,10 @@ app.get('/', async (c) => {
 
 async function editor(c, seg) {
   const def = seg?.definition ?? {};
-  const [events, interests] = await Promise.all([
+  const [events, interests, ch] = await Promise.all([
     q(`select id, name, held_on from events order by held_on desc nulls last`),
     q(`select id, name from interests where active order by sort_order, id`),
+    choices(),
   ]);
   const on = (arr, v) => (arr ?? []).includes(v) ? 'checked' : '';
   const n = await count(def);
@@ -38,27 +39,27 @@ async function editor(c, seg) {
 <p class="lead">条件を選ぶと、右上の人数がすぐ変わります。何も選ばなければ「送信できる連絡先すべて」です。</p>
 <form method="post" action="${seg ? `/segments/${seg.id}` : '/segments'}" id="segform" class="grid2" style="grid-template-columns:minmax(0,2fr) minmax(240px,1fr);align-items:start">
 <div class="card">
-  <label>リストの名前<input type="text" id="name" name="name" value="${seg?.name ?? ''}" required placeholder="例：DXセミナー参加者（経営層）"></label>
+  <label>リストの名前<input type="text" id="name" name="name" value="${seg?.name ?? ''}" required placeholder="例：新規事業に関心のある大企業の方"></label>
 
   <fieldset><legend>参加したイベント（どれか）</legend>
     <div class="checks">${events.map((e) => html`<label><input type="checkbox" name="events" value="${e.id}" ${on(def.events, e.id)}>${e.name} <span class="small muted">${fmtDay(e.held_on)}</span></label>`)}</div>
     <div class="checks small"><span class="muted">対象にする状態：</span>${['attended', 'applied'].map((k) => html`<label><input type="checkbox" name="event_status" value="${k}" ${(def.event_status ?? ['attended']).includes(k) ? 'checked' : ''}>${PART_STATUS[k]}</label>`)}</div>
   </fieldset>
 
-  <fieldset><legend>興味関心（どれか）</legend>
+  <fieldset><legend>興味分類（どれか）</legend>
     <div class="checks">${interests.map((i) => html`<label><input type="checkbox" name="interests" value="${i.id}" ${on(def.interests, i.id)}>${i.name}</label>`)}</div>
   </fieldset>
 
-  <fieldset><legend>役職の区分（どれか）</legend>
-    <div class="checks">${JOB_LEVELS.map((j) => html`<label><input type="checkbox" name="job_levels" value="${j}" ${on(def.job_levels, j)}>${j}</label>`)}</div>
+  <fieldset><legend>企業分類1（どれか）</legend>
+    <div class="checks">${SIZE_CLASSES.map((j) => html`<label><input type="checkbox" name="size_classes" value="${j}" ${on(def.size_classes, j)}>${j}</label>`)}</div>
   </fieldset>
 
-  <fieldset><legend>種別（どれか）</legend>
-    <div class="checks">${CONTACT_TYPES.map((j) => html`<label><input type="checkbox" name="contact_types" value="${j}" ${on(def.contact_types, j)}>${j}</label>`)}</div>
+  <fieldset><legend>企業分類2（どれか）</legend>
+    <div class="checks">${ch.industries.map((j) => html`<label><input type="checkbox" name="industries" value="${j}" ${on(def.industries, j)}>${j}</label>`)}</div>
   </fieldset>
 
-  <fieldset><legend>所属組織の種類（どれか）</legend>
-    <div class="checks">${ORG_TYPES.map((j) => html`<label><input type="checkbox" name="org_types" value="${j}" ${on(def.org_types, j)}>${j}</label>`)}</div>
+  <fieldset><legend>団体所在地（どれか）</legend>
+    <div class="checks">${ch.prefectures.map((j) => html`<label><input type="checkbox" name="prefectures" value="${j}" ${on(def.prefectures, j)}>${j}</label>`)}</div>
   </fieldset>
 
   <fieldset><legend>除外する人：このイベントに申込・参加した人</legend>
@@ -127,8 +128,8 @@ app.get('/:id{[0-9]+}/members', async (c) => {
   return page(c, {
     title: seg.name, active: '/segments',
     body: html`<div><a href="/segments/${seg.id}" class="small">← ${seg.name}</a><h1>対象者 ${n}人</h1></div>
-<div class="card"><div class="scroll"><table><thead><tr><th>氏名</th><th>所属</th><th>メール</th></tr></thead><tbody>
-${rows.map((r) => html`<tr><td><a href="/contacts/${r.id}">${r.last_name} ${r.first_name ?? ''}</a></td><td>${r.org_name ?? ''}</td><td class="small">${r.email}</td></tr>`)}
+<div class="card"><div class="scroll"><table><thead><tr><th>氏名</th><th>企業・団体名</th><th>部署・役職</th><th>メールアドレス</th></tr></thead><tbody>
+${rows.map((r) => html`<tr><td><a href="/contacts/${r.id}">${r.full_name}</a></td><td>${r.org_name ?? ''}</td><td class="small">${[r.department, r.job_title].filter(Boolean).join('　')}</td><td class="small">${r.email}</td></tr>`)}
 </tbody></table></div>${n > rows.length ? html`<p class="small muted">先頭の${rows.length}人を表示しています。</p>` : ''}</div>`,
   });
 });
