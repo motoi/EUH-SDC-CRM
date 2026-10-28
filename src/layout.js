@@ -25,8 +25,8 @@ ${config.demo ? html`<div class="demo">確認用の画面です。データは�
   <button type="button" class="link" id="demo-reset">最初の状態に戻す</button></div>` : ''}
 <header class="top">
   <div class="brand">SDC配信</div>
-  <nav>${NAV.map(([href, label]) => html`<a href="${href}" class="${active === href ? 'on' : ''}">${label}</a>`)}</nav>
-  <div class="who">${user ? html`${user.name}さん <form method="post" action="/logout" class="inline"><button class="link">ログアウト</button></form>` : ''}</div>
+  <nav>${[...NAV, ...(user?.role === 'admin' ? [['/admin', '管理']] : [])].map(([href, label]) => html`<a href="${href}" class="${active === href ? 'on' : ''}">${label}</a>`)}</nav>
+  <div class="who">${user ? html`${user.name}さん（${user.role === 'admin' ? '管理者' : '担当者'}） <form method="post" action="/logout" class="inline"><button class="link">ログアウト</button></form>` : ''}</div>
 </header>
 <main>
   ${flash ? html`<div class="flash ${flash.kind ?? 'ok'}">${flash.text}</div>` : ''}

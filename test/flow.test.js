@@ -81,3 +81,13 @@ test('配信の一連の流れ', async () => {
 test('同じ配信で同じアドレスに二度は送らない', async () => {
   await assert.rejects(q(`insert into deliveries (campaign_id, email) values (1, 'A@EXAMPLE.COM')`));
 });
+
+test('管理画面は管理者だけが開ける', async () => {
+  await q(`insert into staff_users (entra_object_id, name, email, role) values ('a', '管理テスト', 'admin@example.jp', 'admin')`);
+  await req('/login', { id: '1' });
+  assert.equal((await req('/admin')).status, 403);
+  await req('/login', { id: '2' });
+  assert.equal((await req('/admin')).status, 200);
+  await req('/admin/suppressions/lift', { email: 'b@example.com' });
+  assert.equal(await one(`select 1 from suppressions where email = 'b@example.com'`), undefined);
+});
