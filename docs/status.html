@@ -1,0 +1,316 @@
+<title>SDC配信CRM 開発ボード</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Zen+Kaku+Gothic+Antique:wght@500;700;900&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: 1カラムの縦読み。上から「いまどこか → フェーズ → 次の一手と待ち → タスク → 決定事項 → 更新履歴」 */
+:root {
+  --bg: #f3f5f7;
+  --surface: #ffffff;
+  --ink: #18222c;
+  --muted: #5d6b78;
+  --line: #d9e0e6;
+  --accent: #1d6b73;
+  --accent-soft: #dcecee;
+  --ok: #2f7d4f;   --ok-soft: #e1f1e7;
+  --warn: #9a6a0b; --warn-soft: #f8edd3;
+  --bad: #a83a32;  --bad-soft: #f7e1df;
+  --todo: #6b7682; --todo-soft: #e9edf1;
+  --f-display: "Zen Kaku Gothic Antique", "Hiragino Sans", "Yu Gothic", sans-serif;
+  --f-body: "BIZ UDPGothic", "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12181e; --surface: #1a222a; --ink: #e6ecf1; --muted: #98a6b3; --line: #2c3742;
+    --accent: #5fb3bb; --accent-soft: #1d3438;
+    --ok: #6cc28f; --ok-soft: #1c3427; --warn: #e0b45a; --warn-soft: #3a2f17;
+    --bad: #ec8a80; --bad-soft: #3c2220; --todo: #9aa6b2; --todo-soft: #26303a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12181e; --surface: #1a222a; --ink: #e6ecf1; --muted: #98a6b3; --line: #2c3742;
+  --accent: #5fb3bb; --accent-soft: #1d3438;
+  --ok: #6cc28f; --ok-soft: #1c3427; --warn: #e0b45a; --warn-soft: #3a2f17;
+  --bad: #ec8a80; --bad-soft: #3c2220; --todo: #9aa6b2; --todo-soft: #26303a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--f-body); font-size: 15px; line-height: 1.7;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 64px;
+}
+.wrap { max-width: 980px; margin: 0 auto; display: grid; gap: 40px; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; }
+h2 { font-size: 13px; font-weight: 700; letter-spacing: .12em; color: var(--muted); }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+
+/* header */
+header { display: grid; gap: 14px; }
+.eyebrow { font-size: 12px; letter-spacing: .14em; color: var(--accent); font-weight: 700; }
+h1 { font-size: clamp(26px, 4.4vw, 38px); font-weight: 900; line-height: 1.25; }
+.headline { font-size: 17px; max-width: 62ch; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; color: var(--muted); }
+.meta b { color: var(--ink); font-weight: 700; }
+.bar { height: 8px; border-radius: 99px; background: var(--todo-soft); overflow: hidden; max-width: 420px; }
+.bar > i { display: block; height: 100%; background: var(--accent); border-radius: inherit; transition: width .4s; }
+
+/* phases */
+.phases { list-style: none; margin: 14px 0 0; padding: 0; display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.phase { background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px 14px; display: grid; gap: 4px; align-content: start; min-width: 0; }
+.phase .num { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+.phase .name { font-family: var(--f-display); font-weight: 700; font-size: 15px; line-height: 1.4; }
+.phase .goal { font-size: 12.5px; color: var(--muted); line-height: 1.55; }
+.phase .count { font-family: var(--f-mono); font-size: 12px; color: var(--muted); margin-top: 4px; }
+.phase[data-s="active"] { border-color: var(--accent); box-shadow: inset 0 3px 0 var(--accent); }
+.phase[data-s="active"] .num { color: var(--accent); font-weight: 600; }
+.phase[data-s="done"] { opacity: .72; }
+.phase[data-s="done"] .num::after { content: " 完了"; color: var(--ok); }
+
+/* now / waiting */
+.split { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  padding: 18px 20px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+.panel.next { border-color: var(--accent); background: linear-gradient(var(--accent-soft), var(--surface) 70%); }
+.next-text { font-size: 16px; font-weight: 700; }
+ul.plain { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.q { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; }
+.q .who { font-size: 11.5px; font-weight: 700; padding: 1px 8px; border-radius: 99px;
+  background: var(--warn-soft); color: var(--warn); white-space: nowrap; margin-top: 2px; }
+.q .detail { font-size: 13px; color: var(--muted); }
+
+/* tasks */
+.group { display: grid; gap: 6px; }
+.group h3 { font-size: 15px; font-weight: 700; display: flex; gap: 10px; align-items: baseline; margin-top: 10px; }
+.group h3 .mono { font-size: 12px; color: var(--muted); font-weight: 400; }
+.task { display: grid; grid-template-columns: 76px 1fr auto; gap: 12px; align-items: start;
+  padding: 10px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.task .t { min-width: 0; }
+.task .note { font-size: 12.5px; color: var(--muted); }
+.task .owner { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.task[data-s="done"] .title { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--line); }
+.pill { font-size: 11.5px; font-weight: 700; text-align: center; padding: 2px 0; border-radius: 99px; letter-spacing: .04em; }
+.pill[data-s="todo"] { background: var(--todo-soft); color: var(--todo); }
+.pill[data-s="doing"] { background: var(--accent-soft); color: var(--accent); }
+.pill[data-s="done"] { background: var(--ok-soft); color: var(--ok); }
+.pill[data-s="blocked"] { background: var(--bad-soft); color: var(--bad); }
+.filters { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.filters button { font: inherit; font-size: 13px; padding: 4px 12px; border-radius: 99px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+.filters button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.filters button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* decisions & log */
+.timeline { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 0; }
+.timeline li { display: grid; grid-template-columns: 96px 1fr; gap: 16px; padding: 12px 0; border-top: 1px solid var(--line); }
+.timeline li:last-child { border-bottom: 1px solid var(--line); }
+.timeline .date { font-family: var(--f-mono); font-size: 12.5px; color: var(--muted); padding-top: 2px; }
+.timeline .title { font-weight: 700; }
+.timeline .detail { font-size: 13.5px; color: var(--muted); }
+
+.empty { font-size: 13.5px; color: var(--muted); padding: 14px 16px; border: 1px dashed var(--line); border-radius: 8px; }
+footer { font-size: 12.5px; color: var(--muted); }
+
+@media (max-width: 560px) {
+  .task { grid-template-columns: 64px 1fr; }
+  .task .owner { grid-column: 2; }
+  .timeline li { grid-template-columns: 1fr; gap: 2px; }
+}
+@media (prefers-reduced-motion: reduce) { .bar > i { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">EUH SDC ／ メール配信CRM</div>
+    <h1>SDC配信CRM 開発ボード</h1>
+    <p class="headline" id="headline">開発状況を読み込んでいます…</p>
+    <div class="meta">
+      <span>現在のフェーズ <b id="cur-phase">—</b></span>
+      <span>タスク完了 <b class="mono" id="done-count">—</b></span>
+      <span>最終更新 <b class="mono" id="updated">—</b></span>
+    </div>
+    <div class="bar" aria-hidden="true"><i id="bar" style="width:0"></i></div>
+  </header>
+
+  <section>
+    <h2>フェーズ</h2>
+    <ol class="phases" id="phases"><li class="empty">フェーズはまだ登録されていません。</li></ol>
+  </section>
+
+  <section class="split">
+    <div class="panel next">
+      <h2>次にやること</h2>
+      <p class="next-text" id="next">—</p>
+    </div>
+    <div class="panel">
+      <h2>確認・決定待ち</h2>
+      <ul class="plain" id="questions"><li class="empty">待ち事項はありません。</li></ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>タスク</h2>
+    <div class="filters" role="group" aria-label="タスクの絞り込み">
+      <button type="button" id="f-all" data-f="all" aria-pressed="true">すべて</button>
+      <button type="button" id="f-open" data-f="open" aria-pressed="false">未完了</button>
+      <button type="button" id="f-doing" data-f="doing" aria-pressed="false">進行中</button>
+      <button type="button" id="f-blocked" data-f="blocked" aria-pressed="false">止まっている</button>
+    </div>
+    <div id="tasks"><p class="empty" style="margin-top:12px">タスクはまだ登録されていません。</p></div>
+  </section>
+
+  <section>
+    <h2>決定事項</h2>
+    <ol class="timeline" id="decisions"><li class="empty">決定事項はまだありません。</li></ol>
+  </section>
+
+  <section>
+    <h2>更新履歴</h2>
+    <ol class="timeline" id="log"><li class="empty">更新履歴はまだありません。</li></ol>
+  </section>
+
+  <footer id="foot">この画面は開発セッションの進捗に合わせて Claude が更新します。</footer>
+</div>
+
+<script>
+(function () {
+  const S_LABEL = { todo: "未着手", doing: "進行中", done: "完了", blocked: "停止中" };
+  const state = { meta: null, phases: [], tasks: [], questions: [], decisions: [], log: [], filter: "all" };
+  try { const f = localStorage.getItem("sdc-filter"); if (f) state.filter = f; } catch (e) {}
+
+  const $ = (id) => document.getElementById(id);
+  function el(tag, cls, text) {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+  function empty(target, tag, msg) {
+    const n = el(tag, "empty", msg);
+    target.replaceChildren(n);
+  }
+  const byOrder = (a, b) => (a.order ?? 999) - (b.order ?? 999);
+  const byDateDesc = (a, b) => String(b.date || "").localeCompare(String(a.date || "")) || (b.order ?? 0) - (a.order ?? 0);
+
+  function render() {
+    const m = state.meta || {};
+    $("headline").textContent = m.headline || "開発状況はまだ登録されていません。";
+    $("next").textContent = m.nextAction || "—";
+    $("updated").textContent = m.updatedAt || "—";
+
+    const done = state.tasks.filter(t => t.status === "done").length;
+    const total = state.tasks.length;
+    $("done-count").textContent = total ? `${done} / ${total}` : "—";
+    $("bar").style.width = total ? `${Math.round(done / total * 100)}%` : "0";
+
+    const active = state.phases.find(p => p.status === "active");
+    $("cur-phase").textContent = active ? active.name : "—";
+
+    // phases
+    if (state.phases.length) {
+      const ol = $("phases"); ol.replaceChildren();
+      state.phases.forEach((p, i) => {
+        const li = el("li", "phase"); li.dataset.s = p.status || "todo";
+        const ts = state.tasks.filter(t => t.phase === p.id);
+        li.append(
+          el("span", "num", String(i + 1).padStart(2, "0")),
+          el("span", "name", p.name),
+          el("span", "goal", p.goal || ""),
+          el("span", "count", ts.length ? `${ts.filter(t => t.status === "done").length}/${ts.length} 完了` : "")
+        );
+        ol.append(li);
+      });
+    } else empty($("phases"), "li", "フェーズはまだ登録されていません。");
+
+    // questions
+    const open = state.questions.filter(q => q.status !== "closed").sort(byOrder);
+    if (open.length) {
+      const ul = $("questions"); ul.replaceChildren();
+      open.forEach(q => {
+        const li = el("li", "q");
+        const body = el("div");
+        body.append(el("div", null, q.title));
+        if (q.detail) body.append(el("div", "detail", q.detail));
+        li.append(el("span", "who", q.owner || "未定"), body);
+        ul.append(li);
+      });
+    } else empty($("questions"), "li", "待ち事項はありません。");
+
+    // tasks
+    document.querySelectorAll(".filters button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.f === state.filter)));
+    const pass = (t) => state.filter === "all" ? true
+      : state.filter === "open" ? t.status !== "done"
+      : t.status === state.filter;
+    const box = $("tasks"); box.replaceChildren();
+    const phaseList = state.phases.length ? state.phases : [{ id: null, name: "タスク" }];
+    let shown = 0;
+    phaseList.forEach((p, i) => {
+      const ts = state.tasks.filter(t => (p.id == null || t.phase === p.id) && pass(t)).sort(byOrder);
+      if (!ts.length) return;
+      const g = el("div", "group");
+      const h = el("h3"); h.append(el("span", "mono", String(i + 1).padStart(2, "0")), document.createTextNode(p.name));
+      g.append(h);
+      ts.forEach(t => {
+        const row = el("div", "task"); row.dataset.s = t.status || "todo";
+        const pill = el("span", "pill", S_LABEL[t.status] || "未着手"); pill.dataset.s = t.status || "todo";
+        const body = el("div", "t"); body.append(el("div", "title", t.title));
+        if (t.note) body.append(el("div", "note", t.note));
+        row.append(pill, body, el("span", "owner", t.owner || ""));
+        g.append(row); shown++;
+      });
+      box.append(g);
+    });
+    if (!shown) box.append(el("p", "empty", total ? "この条件に当てはまるタスクはありません。" : "タスクはまだ登録されていません。"));
+
+    // timelines
+    function timeline(id, rows, msg) {
+      const ol = $(id);
+      if (!rows.length) return empty(ol, "li", msg);
+      ol.replaceChildren();
+      rows.slice().sort(byDateDesc).forEach(r => {
+        const li = el("li"); const body = el("div");
+        body.append(el("div", "title", r.title || r.text));
+        if (r.detail) body.append(el("div", "detail", r.detail));
+        li.append(el("span", "date", r.date || ""), body);
+        ol.append(li);
+      });
+    }
+    timeline("decisions", state.decisions, "決定事項はまだありません。");
+    timeline("log", state.log, "更新履歴はまだありません。");
+  }
+
+  document.querySelectorAll(".filters button").forEach(b => b.addEventListener("click", () => {
+    state.filter = b.dataset.f;
+    try { localStorage.setItem("sdc-filter", state.filter); } catch (e) {}
+    render();
+  }));
+
+  render();
+
+  (async () => {
+    const db = window.claude ? await window.claude.use("db") : null;
+    if (!db) {
+      $("headline").textContent = "開発状況を読み込めませんでした。claude.ai にサインインした状態で開いてください。";
+      return;
+    }
+    const onErr = () => { $("foot").textContent = "最新の状態を取得できませんでした。ページを再読み込みしてください。"; };
+    db.doc("status/project").onSnapshot(s => { state.meta = s.exists ? s.data() : null; render(); }, onErr);
+    const coll = (name, key) => db.collection(name).onSnapshot(s => {
+      state[key] = s.docs.map(d => Object.assign({ id: d.id }, d.data()));
+      if (key === "phases") state.phases.sort(byOrder);
+      render();
+    }, onErr);
+    coll("phases", "phases");
+    coll("tasks", "tasks");
+    coll("questions", "questions");
+    coll("decisions", "decisions");
+    coll("log", "log");
+  })();
+})();
+</script>

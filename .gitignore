@@ -1,0 +1,7 @@
+node_modules/
+.data/
+.outbox/
+.env
+site/
+.claude/
+.DS_Store
