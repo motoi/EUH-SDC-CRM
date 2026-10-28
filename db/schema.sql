@@ -39,7 +39,7 @@ create index organizations_normalized_name_idx on organizations (normalized_name
 create table contacts (
   id               bigint generated always as identity primary key,
   full_name        text not null,                 -- 氏名
-  email            citext,                        -- メールアドレス。名刺にない人もいるので null 可
+  email            citext not null,               -- メールアドレス。この人を見分ける ID として使う（取り込みもこれで照合する）
   organization_id  bigint references organizations (id),
   department       text,                          -- 部署
   job_title        text,                          -- 役職（自由記述。名刺どおり）
@@ -53,7 +53,7 @@ create table contacts (
 );
 -- 有効な連絡先の中でメールアドレスは一意（統合済み・アーカイブ済みは除く）
 create unique index contacts_email_active_uq on contacts (email)
-  where email is not null and merged_into_id is null and archived_at is null;
+  where merged_into_id is null and archived_at is null;
 create index contacts_organization_idx on contacts (organization_id);
 
 -- ───────────────────────────────── 入手経路と同意の根拠
@@ -218,8 +218,7 @@ create table audit_log (
 create view sendable_contacts as
 select c.*
 from contacts c
-where c.email is not null
-  and c.merged_into_id is null
+where c.merged_into_id is null
   and c.archived_at is null
   and not exists (select 1 from suppressions s where s.email = c.email)
   -- 同意の根拠が確認できる経路が一つ以上あること

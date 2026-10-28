@@ -9,7 +9,7 @@ import { start as startSender } from '../src/sender.js';
 import { reclassifyAll } from '../src/job-level.js';
 
 // スキーマを変えたら番号を上げる（前の版のデータを持っている人も、新しい形で作り直される）
-const DB = 'sdc-demo-v4';
+const DB = 'sdc-demo-v5';
 const JAR_KEY = 'sdc-demo-cookies';
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },

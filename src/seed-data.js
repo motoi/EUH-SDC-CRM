@@ -53,9 +53,8 @@ export async function seed(q) {
 
   const used = new Set();
   for (let i = 1; i <= 320; i++) {
-    let email = `user${i}@${pick(['example.com', 'example.jp'])}`;
-    if (chance(0.03)) email = null;
-    if (email && used.has(email)) continue;
+    const email = `user${i}@${pick(['example.com', 'example.jp'])}`;
+    if (used.has(email)) continue;
     used.add(email);
     const [c] = await q(`insert into contacts (full_name, email, organization_id, department, job_title) values ($1,$2,$3,$4,$5) returning id`,
       [`${pick(LAST)} ${pick(FIRST)}`, email, pick(orgIds), pick(DEPTS), pick(TITLES)]);

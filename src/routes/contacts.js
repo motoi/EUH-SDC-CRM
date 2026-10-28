@@ -82,7 +82,7 @@ function contactForm(r = {}, opts = {}) {
   <label>部署<input type="text" id="department" name="department" value="${r.department ?? ''}"></label>
   <label>役職<span class="hint">名刺どおりに自由に書けます。${r.job_level ? `自動の区分：${r.job_level}` : '区分（経営層・部長級・課長級など）は自動で付きます'}</span>
     <input type="text" id="job_title" name="job_title" value="${r.job_title ?? ''}"></label>
-  <label>メールアドレス<input type="email" id="email" name="email" value="${r.email ?? ''}"></label>
+  <label>メールアドレス<span class="hint">この人を見分ける ID です。必須で、同じアドレスは二人登録できません</span><input type="email" id="email" name="email" value="${r.email ?? ''}" required></label>
 </div>
 <fieldset><legend>企業・団体の情報</legend>
   <p class="small muted" style="margin:0">同じ企業・団体に所属する全員に反映されます。</p>
@@ -160,8 +160,8 @@ app.get('/new', async (c) => {
 
 app.post('/', async (c) => {
   const b = await c.req.parseBody();
-  if (!val(b, 'full_name') || !val(b, 'consent_basis')) {
-    setFlash(c, '氏名と「メールを送ってよい根拠」は必須です。', 'bad');
+  if (!val(b, 'full_name') || !val(b, 'email') || !val(b, 'consent_basis')) {
+    setFlash(c, '氏名・メールアドレス・「メールを送ってよい根拠」は必須です。', 'bad');
     return c.redirect('/contacts/new');
   }
   try {
@@ -244,7 +244,7 @@ ${r.email && !sup ? html`<form class="card" method="post" action="/contacts/${r.
 app.post('/:id{[0-9]+}', async (c) => {
   const id = c.req.param('id');
   const b = await c.req.parseBody();
-  if (!val(b, 'full_name')) { setFlash(c, '氏名は必須です。', 'bad'); return c.redirect(`/contacts/${id}`); }
+  if (!val(b, 'full_name') || !val(b, 'email')) { setFlash(c, '氏名とメールアドレスは必須です。', 'bad'); return c.redirect(`/contacts/${id}`); }
   try {
     await tx(async (run) => {
       const oid = await orgId(run, b);

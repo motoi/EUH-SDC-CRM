@@ -11,16 +11,17 @@ const { readXlsx } = await import('../src/xlsx-read.js');
 const app = createApp();
 
 // テスト用に、最小限の .xlsx（無圧縮の zip）を作る
-function makeXlsx(sheetName, rows) {
+function makeXlsx(sheetName, rows, more = []) {
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
   const col = (i) => String.fromCharCode(65 + i);
-  const sheet = `<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${
-    rows.map((r, ri) => `<row r="${ri + 1}">${r.map((v, ci) => v === '' ? '' : `<c r="${col(ci)}${ri + 1}" t="inlineStr"><is><t>${esc(v)}</t></is></c>`).join('')}</row>`).join('')
+  const all = [[sheetName, rows], ...more];
+  const sheetXml = (rs) => `<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${
+    rs.map((r, ri) => `<row r="${ri + 1}">${r.map((v, ci) => v === '' ? '' : `<c r="${col(ci)}${ri + 1}" t="inlineStr"><is><t>${esc(v)}</t></is></c>`).join('')}</row>`).join('')
   }</sheetData></worksheet>`;
   const files = {
-    'xl/workbook.xml': `<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${sheetName}" sheetId="1" r:id="rId1"/></sheets></workbook>`,
-    'xl/_rels/workbook.xml.rels': `<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>`,
-    'xl/worksheets/sheet1.xml': sheet,
+    'xl/workbook.xml': `<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${all.map(([n], i) => `<sheet name="${esc(n)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('')}</sheets></workbook>`,
+    'xl/_rels/workbook.xml.rels': `<Relationships>${all.map((_, i) => `<Relationship Id="rId${i + 1}" Target="worksheets/sheet${i + 1}.xml"/>`).join('')}</Relationships>`,
+    ...Object.fromEntries(all.map(([, rs], i) => [`xl/worksheets/sheet${i + 1}.xml`, sheetXml(rs)])),
   };
   const locals = [], centrals = [];
   let offset = 0;
@@ -109,5 +110,45 @@ test('必要な列がないファイルは確認画面に進めない', async ()
   const res = await req('/contacts/import', form);
   assert.equal(res.headers.get('location'), '/contacts/import');
   const flash = decodeURIComponent(res.headers.getSetCookie().find((s) => s.startsWith('flash=')).split(';')[0].slice(6));
-  assert.match(flash, /氏名.*企業・団体名.*メールアドレス/);
+  assert.match(flash, /Sheet1.*メールアドレス/);
+});
+
+test('顧客以外のシートは、シート名のイベントの参加者として記録する（メールアドレスで照合）', async () => {
+  const EV = [['メールアドレス', '氏名', '企業・団体名', '参加状況'],
+    ['ICHIRO@example.jp', '', '', ''],                       // 登録済み（前のテストで追加）→ 参加
+    ['kizon@example.jp', '', '', 'キャンセル'],              // 登録済み → キャンセル
+    ['shinki@example.jp', '見本 新子', '株式会社サンプル新規', '申込'],   // 新しい人 → 追加して申込
+    ['nanashi2@example.jp', '', '', ''],                    // 未登録で氏名なし → エラー
+    ['', '見本 無名', '', ''],                               // メールなし → エラー
+    ['hachi@example.jp', '見本 八子', '', '見学'],           // 参加状況が不正 → エラー
+  ];
+  const form = new FormData();
+  form.set('file', new File([makeXlsx('顧客', [H, ['見本 九郎', '株式会社サンプル物産', '', '', 'kuro@example.jp', '', '', '', '']], [['DXセミナー 2026冬', EV]])], 'イベント.xlsx'));
+  form.set('source_kind', '名刺交換');
+  form.set('consent_basis', 'opt_in');
+  const res = await req('/contacts/import', form);
+  const id = res.headers.get('location').split('/').pop();
+  const b = await one(`select staged from import_batches where id = $1`, [id]);
+  const ev = b.staged.sheets.find((x) => x.event);
+  assert.deepEqual([ev.event, ev.eventNote, ev.create, ev.update, ev.error], ['DXセミナー 2026冬', '新しく作るイベント', 1, 2, 3]);
+
+  await req(`/contacts/import/${id}/apply`, new URLSearchParams());
+  const parts = await q(`select c.email::text, ep.status from event_participations ep join contacts c on c.id = ep.contact_id
+    join events e on e.id = ep.event_id where e.name = 'DXセミナー 2026冬' order by c.email`);
+  assert.deepEqual(parts.map((p) => [p.email, p.status]), [['ichiro@example.jp', 'attended'], ['kizon@example.jp', 'cancelled'], ['shinki@example.jp', 'applied']]);
+  assert.ok(await one(`select 1 from contacts where email = 'kuro@example.jp'`));
+  const src = await one(`select c.source_kind, c.source_detail from contact_sources c join contacts p on p.id = c.contact_id where p.email = 'shinki@example.jp'`);
+  assert.deepEqual(src, { source_kind: 'イベント申込', source_detail: 'DXセミナー 2026冬' });
+});
+
+test('連絡先はメールアドレスなしでは登録できない', async () => {
+  await assert.rejects(q(`insert into contacts (full_name) values ('メールなし')`));
+});
+
+test('取り込みで作られたイベントに、あとから日付を入れられる', async () => {
+  const ev = await one(`select id from events where name = 'DXセミナー 2026冬'`);
+  assert.equal((await req(`/masters/events/${ev.id}`)).status, 200);
+  await req(`/masters/events/${ev.id}`, new URLSearchParams({ name: 'DXセミナー 2026冬', held_on: '2026-12-05', kind: 'セミナー', format: '対面' }));
+  const e = await one(`select to_char(held_on, 'YYYY-MM-DD') d, kind from events where id = $1`, [ev.id]);
+  assert.deepEqual(e, { d: '2026-12-05', kind: 'セミナー' });
 });
