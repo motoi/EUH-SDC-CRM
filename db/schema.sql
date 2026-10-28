@@ -60,12 +60,16 @@ create index contacts_organization_idx on contacts (organization_id);
 create table import_batches (
   id               bigint generated always as identity primary key,
   filename         text not null,
-  source_kind      text not null,                 -- contact_sources.source_kind と同じ値
+  sheet_name       text,
+  status           text not null default 'preview' check (status in ('preview', 'done', 'cancelled')),  -- 確認中 / 取り込み済み / やめた
+  options          jsonb not null default '{}',   -- 経路・送ってよい根拠など、全行に共通で付ける情報
+  staged           jsonb,                         -- 確認画面に出す各行の判定。取り込み後は消す
   imported_by      bigint references staff_users (id),
   imported_at      timestamptz not null default now(),
+  applied_at       timestamptz,
   row_count        integer not null default 0,
   created_count    integer not null default 0,
-  merged_count     integer not null default 0,
+  updated_count    integer not null default 0,
   skipped_count    integer not null default 0
 );
 

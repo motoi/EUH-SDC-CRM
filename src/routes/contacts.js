@@ -45,7 +45,7 @@ app.get('/', async (c) => {
   return page(c, {
     title: '連絡先', active: '/contacts', flash: takeFlash(c),
     body: html`
-<div class="row spread"><h1>連絡先</h1><a class="btn" href="/contacts/new">連絡先を追加</a></div>
+<div class="row spread"><h1>連絡先</h1><div class="row"><a class="btn sub" href="/contacts/import">Excel から取り込む</a><a class="btn" href="/contacts/new">連絡先を追加</a></div></div>
 <form class="card" method="get">
   <div class="row">
     <label style="flex:1 1 280px">氏名・企業・団体名・部署・メールで探す<input type="search" id="q" name="q" value="${kw}" placeholder="例：サンプル、example.jp"></label>

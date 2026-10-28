@@ -8,6 +8,7 @@ import masters from './routes/masters.js';
 import outbox from './routes/outbox.js';
 import pub from './routes/public.js';
 import admin from './routes/admin.js';
+import importer from './routes/import.js';
 
 export function createApp() {
   const app = new Hono();
@@ -20,6 +21,7 @@ export function createApp() {
   app.use('/admin', requireAdmin);
   app.use('/admin/*', requireAdmin);
   app.get('/', (c) => c.redirect('/contacts'));
+  app.route('/contacts/import', importer);
   app.route('/contacts', contacts);
   app.route('/segments', segments);
   app.route('/campaigns', campaigns);

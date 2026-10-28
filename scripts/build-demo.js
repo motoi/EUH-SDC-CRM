@@ -19,7 +19,7 @@ await build({
   minify: true,
   loader: { '.sql': 'text' },
   // ブラウザでは使わない Node 用の部品と、別ファイルで置く PGlite は含めない
-  external: ['./pglite/*', 'pg', 'node:*', '@electric-sql/pglite', '@electric-sql/pglite/*', '@hono/node-server'],
+  external: ['./pglite/*', '*xlsx-read.js', 'pg', 'node:*', '@electric-sql/pglite', '@electric-sql/pglite/*', '@hono/node-server'],
 });
 
 // PGlite は postgres.wasm などを自分の置き場所からの相対パスで読むので、構成を保ったまま置く

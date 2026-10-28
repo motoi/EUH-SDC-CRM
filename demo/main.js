@@ -9,7 +9,7 @@ import { start as startSender } from '../src/sender.js';
 import { reclassifyAll } from '../src/job-level.js';
 
 // スキーマを変えたら番号を上げる（前の版のデータを持っている人も、新しい形で作り直される）
-const DB = 'sdc-demo-v3';
+const DB = 'sdc-demo-v4';
 const JAR_KEY = 'sdc-demo-cookies';
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -128,7 +128,7 @@ document.addEventListener('click', (e) => {
 document.addEventListener('submit', (e) => {
   const form = e.target;
   e.preventDefault();
-  const action = form.getAttribute('action') || current.split('?')[0];
+  const action = e.submitter?.getAttribute('formaction') || form.getAttribute('action') || current.split('?')[0];
   const data = new URLSearchParams(new FormData(form));
   if ((form.getAttribute('method') ?? 'get').toLowerCase() === 'post') go(action, { method: 'POST', body: data });
   else go(`${action}?${data}`);

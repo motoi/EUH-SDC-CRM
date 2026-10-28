@@ -12,7 +12,7 @@ const ACTIONS = {
   'segment.create': '配信先リストを作成', 'segment.update': '配信先リストを編集',
   'campaign.create': '配信を作成', 'campaign.update': '配信を編集', 'campaign.test': 'テスト送信',
   'campaign.confirm': '配信を予約', 'campaign.cancel': '配信を取り消し',
-  'staff.create': '利用者を追加', 'staff.update': '利用者を変更', 'suppression.lift': '配信停止を解除',
+  'staff.create': '利用者を追加', 'staff.update': '利用者を変更', 'suppression.lift': '配信停止を解除', 'import.apply': 'Excel から取り込み',
 };
 const REASON = { unsubscribe: '本人が配信停止', hard_bounce: '宛先不明で届かない', complaint: '迷惑メール報告', manual: '担当者が停止' };
 
