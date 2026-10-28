@@ -6,9 +6,10 @@ import { configure, q, tx } from '../src/db.js';
 import { createApp } from '../src/app.js';
 import { seed } from '../src/seed-data.js';
 import { start as startSender } from '../src/sender.js';
+import { reclassifyAll } from '../src/job-level.js';
 
 // スキーマを変えたら番号を上げる（前の版のデータを持っている人も、新しい形で作り直される）
-const DB = 'sdc-demo-v2';
+const DB = 'sdc-demo-v3';
 const JAR_KEY = 'sdc-demo-cookies';
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -33,6 +34,7 @@ configure({
 try {
   const [{ n }] = await q(`select count(*)::int n from staff_users`);
   if (n === 0) await tx((run) => seed(run));
+  else await reclassifyAll(q);
 } catch (e) {
   document.getElementById('boot-err').textContent = `準備に失敗しました：${e.message}`;
   throw e;

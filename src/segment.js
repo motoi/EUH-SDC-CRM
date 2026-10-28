@@ -1,6 +1,9 @@
 // 配信先リストの条件（segments.definition）と、画面のフォーム・SQL の相互変換。
 // 同じ項目の中は「どれか」（OR）、項目どうしは「すべて」（AND）。
 import { q } from './db.js';
+import { JOB_LEVELS } from './job-level.js';
+
+export { JOB_LEVELS };
 
 // 企業分類1（Excel の列と同じ区分）
 export const SIZE_CLASSES = ['大企業', '中堅企業', '中小企業', '小規模事業者', '教育機関', 'その他'];
@@ -24,6 +27,7 @@ export function fromForm(body) {
     events: ids(pick('events')),
     event_status: strs(pick('event_status'), Object.keys(PART_STATUS)),
     interests: ids(pick('interests')),
+    job_levels: strs(pick('job_levels'), JOB_LEVELS),
     size_classes: strs(pick('size_classes'), SIZE_CLASSES),
     industries: strs(pick('industries')),
     prefectures: strs(pick('prefectures')),
@@ -47,6 +51,7 @@ export function toSql(def = {}) {
   if (def.interests?.length) {
     where.push(`exists (select 1 from contact_interests ci where ci.contact_id = c.id and ci.interest_id = any(${p(def.interests)}::bigint[]))`);
   }
+  if (def.job_levels?.length) where.push(`c.job_level = any(${p(def.job_levels)}::text[])`);
   if (def.size_classes?.length) where.push(org(`o.size_class = any(${p(def.size_classes)}::text[])`));
   if (def.industries?.length) where.push(org(`o.industry = any(${p(def.industries)}::text[])`));
   if (def.prefectures?.length) where.push(org(`${PREF_SQL} = any(${p(def.prefectures)}::text[])`));
@@ -90,6 +95,7 @@ export async function describe(def = {}) {
     const it = await q(`select name from interests where id = any($1::bigint[]) order by sort_order, id`, [def.interests]);
     parts.push(`興味分類：${it.map((i) => i.name).join('・')}`);
   }
+  if (def.job_levels?.length) parts.push(`役職区分：${def.job_levels.join('・')}`);
   if (def.size_classes?.length) parts.push(`企業分類1：${def.size_classes.join('・')}`);
   if (def.industries?.length) parts.push(`企業分類2：${def.industries.join('・')}`);
   if (def.prefectures?.length) parts.push(`団体所在地：${def.prefectures.join('・')}`);

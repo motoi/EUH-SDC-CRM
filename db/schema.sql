@@ -42,7 +42,8 @@ create table contacts (
   email            citext,                        -- メールアドレス。名刺にない人もいるので null 可
   organization_id  bigint references organizations (id),
   department       text,                          -- 部署
-  job_title        text,                          -- 役職（名刺どおり）
+  job_title        text,                          -- 役職（自由記述。名刺どおり）
+  job_level        text,                          -- 役職区分。job_title から src/job-level.js の表で自動で付ける
   notes            text,
   merged_into_id   bigint references contacts (id),  -- 名寄せで統合された側はここに統合先を入れて残す
   archived_at      timestamptz,                   -- 退職・不要などで一覧から外したもの

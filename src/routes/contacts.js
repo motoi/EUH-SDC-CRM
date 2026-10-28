@@ -4,6 +4,7 @@ import { q, one, tx } from '../db.js';
 import { page, setFlash, takeFlash, fmtDay } from '../layout.js';
 import { audit } from '../auth.js';
 import { SIZE_CLASSES, PART_STATUS, splitInterests } from '../segment.js';
+import { classifyJobTitle } from '../job-level.js';
 
 const app = new Hono();
 const PER = 50;
@@ -36,7 +37,7 @@ app.get('/', async (c) => {
   if (SIZE_CLASSES.includes(size)) { params.push(size); where.push(`o.size_class = $${params.length}`); }
   const base = `from contacts c left join organizations o on o.id = c.organization_id where ${where.join(' and ')}`;
   const [{ n }] = await q(`select count(*)::int n ${base}`, params);
-  const rows = await q(`select c.id, c.full_name, c.email, c.department, c.job_title, o.name org_name, o.size_class, o.industry, ${STATUS_SQL} status
+  const rows = await q(`select c.id, c.full_name, c.email, c.department, c.job_title, c.job_level, o.name org_name, o.size_class, o.industry, ${STATUS_SQL} status
     ${base} order by o.name nulls last, c.full_name, c.id limit ${PER} offset ${(pg - 1) * PER}`, params);
   const pages = Math.max(1, Math.ceil(n / PER));
   const qs = (p) => `?q=${encodeURIComponent(kw)}&size=${encodeURIComponent(size)}&page=${p}`;
@@ -59,7 +60,7 @@ app.get('/', async (c) => {
     <thead><tr><th>氏名</th><th>企業・団体名／部署・役職</th><th>企業分類</th><th>メールアドレス</th><th>状態</th></tr></thead>
     <tbody>${rows.map((r) => html`<tr>
       <td><a href="/contacts/${r.id}">${r.full_name}</a></td>
-      <td>${r.org_name ?? ''}<div class="small muted">${[r.department, r.job_title].filter(Boolean).join('　')}</div></td>
+      <td>${r.org_name ?? ''}<div class="small muted">${[r.department, r.job_title].filter(Boolean).join('　')}${r.job_level && r.job_level !== '未記入' ? html` <span class="pill">${r.job_level}</span>` : ''}</div></td>
       <td class="small">${r.size_class ?? ''}<div class="muted">${r.industry ?? ''}</div></td>
       <td class="small">${r.email ?? ''}</td>
       <td>${STATUS_LABEL[r.status]}</td></tr>`)}</tbody>
@@ -79,7 +80,8 @@ function contactForm(r = {}, opts = {}) {
     <input type="text" id="org_name" name="org_name" value="${r.org_name ?? ''}" list="orgs"></label>
   <datalist id="orgs">${orgs.map((o) => html`<option value="${o.name}">`)}</datalist>
   <label>部署<input type="text" id="department" name="department" value="${r.department ?? ''}"></label>
-  <label>役職<input type="text" id="job_title" name="job_title" value="${r.job_title ?? ''}"></label>
+  <label>役職<span class="hint">名刺どおりに自由に書けます。${r.job_level ? `自動の区分：${r.job_level}` : '区分（経営層・部長級・課長級など）は自動で付きます'}</span>
+    <input type="text" id="job_title" name="job_title" value="${r.job_title ?? ''}"></label>
   <label>メールアドレス<input type="email" id="email" name="email" value="${r.email ?? ''}"></label>
 </div>
 <fieldset><legend>企業・団体の情報</legend>
@@ -165,9 +167,9 @@ app.post('/', async (c) => {
   try {
     const id = await tx(async (run) => {
       const oid = await orgId(run, b);
-      const [r] = await run(`insert into contacts (full_name, email, organization_id, department, job_title, notes)
-        values ($1,$2,$3,$4,$5,$6) returning id`,
-        [val(b, 'full_name'), val(b, 'email'), oid, val(b, 'department'), val(b, 'job_title'), val(b, 'notes')]);
+      const [r] = await run(`insert into contacts (full_name, email, organization_id, department, job_title, job_level, notes)
+        values ($1,$2,$3,$4,$5,$6,$7) returning id`,
+        [val(b, 'full_name'), val(b, 'email'), oid, val(b, 'department'), val(b, 'job_title'), classifyJobTitle(b.job_title), val(b, 'notes')]);
       await setInterests(run, r.id, b.interests);
       await run(`insert into contact_sources (contact_id, source_kind, source_detail, consent_basis, acquired_on) values ($1,$2,$3,$4,$5)`,
         [r.id, val(b, 'source_kind') ?? '手入力', val(b, 'source_detail'), val(b, 'consent_basis'), val(b, 'acquired_on')]);
@@ -246,8 +248,8 @@ app.post('/:id{[0-9]+}', async (c) => {
   try {
     await tx(async (run) => {
       const oid = await orgId(run, b);
-      await run(`update contacts set full_name=$2, email=$3, organization_id=$4, department=$5, job_title=$6, notes=$7, updated_at=now() where id=$1`,
-        [id, val(b, 'full_name'), val(b, 'email'), oid, val(b, 'department'), val(b, 'job_title'), val(b, 'notes')]);
+      await run(`update contacts set full_name=$2, email=$3, organization_id=$4, department=$5, job_title=$6, job_level=$7, notes=$8, updated_at=now() where id=$1`,
+        [id, val(b, 'full_name'), val(b, 'email'), oid, val(b, 'department'), val(b, 'job_title'), classifyJobTitle(b.job_title), val(b, 'notes')]);
       await setInterests(run, id, b.interests);
     });
   } catch (e) {

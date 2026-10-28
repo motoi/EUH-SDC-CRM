@@ -2,6 +2,7 @@
 // 項目は事務局の Excel の列（氏名・企業・団体名・部署・役職・メールアドレス・団体所在地・企業分類1・企業分類2・興味分類）に合わせる。
 // scripts/seed.js（Node）と確認用サイト（ブラウザ）の両方から使う
 import { normalizeOrg } from './routes/contacts.js';
+import { reclassifyAll } from './job-level.js';
 
 export async function seed(q) {
   let s = 42;
@@ -21,7 +22,7 @@ export async function seed(q) {
   ];
   const LOCATIONS = ['広島県広島市中区', '広島県広島市南区', '広島県広島市東区', '広島県安芸郡府中町', '広島県東広島市', '広島県福山市', '岡山県岡山市北区', '東京都港区', '東京都中央区'];
   const DEPTS = ['経営企画部', '新規事業開発室', '人事部', '研究開発本部', '営業部', 'デザイン本部', '地域共創本部', '購買本部', null];
-  const TITLES = ['代表取締役', '部長', '課長', 'マネージャー', '主任', '一般', '主査', '支店長', null];
+  const TITLES = ['代表取締役', '取締役', '部長', '次長', '課長', 'マネージャー', 'シニアマネージャー', 'アシスタントマネージャー', '主任', '主査', '一般', '支店長', '研究員', '顧問', null];
   const INTERESTS = ['新規事業', 'リベラルアーツ', 'DX', '人材育成', '組織開発', 'ソーシャルデザイン', '地域共創', 'サステナビリティ'];
   const FACULTY = ['教員A', '教員B', '教員C', '教員D'];
 
@@ -76,6 +77,8 @@ export async function seed(q) {
     if (chance(0.3)) await q(`insert into contact_interests (contact_id, interest_id, origin) values ($1,$2,'self_reported') on conflict do nothing`, [c.id, 1 + Math.floor(rnd() * INTERESTS.length)]);
     if (email && chance(0.03)) await q(`insert into suppressions (email, reason) values ($1, $2)`, [email, pick(['unsubscribe', 'hard_bounce'])]);
   }
+
+  await reclassifyAll(q);
 
   await q(`insert into segments (name, definition, created_by) values
     ('DXセミナー参加者', $1, 3), ('新規事業に関心のある大企業・中堅企業', $2, 3)`,

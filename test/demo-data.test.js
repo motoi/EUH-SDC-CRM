@@ -22,5 +22,5 @@ test('組織名はすべて架空と分かる名前', async () => {
 test('確認用サイトの入口は、ダミーデータ以外を読み込まない', async () => {
   const src = await readFile(new URL('../demo/main.js', import.meta.url), 'utf8');
   const imports = [...src.matchAll(/import[^'"]*['"]([^'"]+)['"]/g)].map((m) => m[1]);
-  assert.deepEqual(imports.sort(), ['../db/schema.sql', '../src/app.js', '../src/db.js', '../src/seed-data.js', '../src/sender.js', './pglite/contrib/citext.js', './pglite/index.js'].sort());
+  assert.deepEqual(imports.sort(), ['../db/schema.sql', '../src/app.js', '../src/db.js', '../src/seed-data.js', '../src/sender.js', '../src/job-level.js', './pglite/contrib/citext.js', './pglite/index.js'].sort());
 });

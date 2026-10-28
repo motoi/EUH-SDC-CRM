@@ -3,7 +3,7 @@ import { html, raw } from 'hono/html';
 import { q, one } from '../db.js';
 import { page, setFlash, takeFlash, fmtDay } from '../layout.js';
 import { audit } from '../auth.js';
-import { fromForm, count, members, describe, choices, SIZE_CLASSES, PART_STATUS } from '../segment.js';
+import { fromForm, count, members, describe, choices, SIZE_CLASSES, JOB_LEVELS, PART_STATUS } from '../segment.js';
 
 const app = new Hono();
 
@@ -48,6 +48,11 @@ async function editor(c, seg) {
 
   <fieldset><legend>興味分類（どれか）</legend>
     <div class="checks">${interests.map((i) => html`<label><input type="checkbox" name="interests" value="${i.id}" ${on(def.interests, i.id)}>${i.name}</label>`)}</div>
+  </fieldset>
+
+  <fieldset><legend>役職区分（どれか）</legend>
+    <p class="small muted" style="margin:0">役職の書き方から自動で付けた区分です。</p>
+    <div class="checks">${JOB_LEVELS.map((j) => html`<label><input type="checkbox" name="job_levels" value="${j}" ${on(def.job_levels, j)}>${j}</label>`)}</div>
   </fieldset>
 
   <fieldset><legend>企業分類1（どれか）</legend>
