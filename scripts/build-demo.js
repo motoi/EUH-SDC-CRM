@@ -1,6 +1,7 @@
 // 確認用サイトを site/ に組み立てる（GitHub Pages などの静的ホスティングにそのまま置ける）
 import { build } from 'esbuild';
-import { rm, mkdir, cp, readdir, writeFile } from 'node:fs/promises';
+import { rm, mkdir, cp, readdir, readFile, writeFile, rename } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 
 const out = 'site';
 const pg = 'node_modules/@electric-sql/pglite/dist';
@@ -27,6 +28,11 @@ for (const f of await readdir(pg)) {
 }
 await cp(`${pg}/contrib/citext.js`, `${out}/pglite/contrib/citext.js`);
 await cp(`${pg}/fs`, `${out}/pglite/fs`, { recursive: true }).catch(() => {});
-await cp('demo/index.html', `${out}/index.html`);
+// GitHub Pages はブラウザに10分間ファイルを使い回させるので、中身が変わるたびに app.js の名前を変える
+const appJs = await readFile(`${out}/app.js`);
+const hash = createHash('sha256').update(appJs).digest('hex').slice(0, 10);
+await rename(`${out}/app.js`, `${out}/app.${hash}.js`);
+const index = await readFile('demo/index.html', 'utf8');
+await writeFile(`${out}/index.html`, index.replace('./app.js', `./app.${hash}.js`));
 await writeFile(`${out}/.nojekyll`, '');
 console.log('site/ を作成しました');
