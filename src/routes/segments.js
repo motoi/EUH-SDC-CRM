@@ -37,7 +37,7 @@ async function editor(c, seg) {
     body: html`
 <div><a href="/segments" class="small">← 配信先リスト</a><h1>${seg ? 'リストを編集' : '新しい配信先リスト'}</h1></div>
 <p class="lead">条件を選ぶと、右上の人数がすぐ変わります。何も選ばなければ「送信できる連絡先すべて」です。</p>
-<form method="post" action="${seg ? `/segments/${seg.id}` : '/segments'}" id="segform" class="grid2" style="grid-template-columns:minmax(0,2fr) minmax(240px,1fr);align-items:start">
+<form method="post" action="${seg ? `/segments/${seg.id}` : '/segments'}" id="segform" class="grid2 split wide">
 <div class="card">
   <label>リストの名前<input type="text" id="name" name="name" value="${seg?.name ?? ''}" required placeholder="例：新規事業に関心のある大企業の方"></label>
 

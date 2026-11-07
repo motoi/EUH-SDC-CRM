@@ -1,8 +1,9 @@
-// 配信：本文を書く → テスト用ファイル → 人数を確認して確定 → 送信ファイルを書き出す → 送り終えたファイルを取り込む
-// メールを送るのは Power Automate（OneDrive の「配信.xlsx」を1行ずつ、間をあけて共有メールボックスから送るフロー）。
-// CRM は「誰に・何を送るか」を決めてファイルにし、送った結果を記録する。
+// 配信：本文を書く →（任意）自分あてのテスト → 人数を確認して送信ファイルを書き出す → Power Automate で送る
+// メールを送るのは Power Automate（共有フォルダーの「配信.xlsx」を1行ずつ、間をあけて共有メールボックスから送るフロー）。
+// CRM は送信ファイルを書き出した時点で送信済みとして記録する。途中で止まったときだけ、共有フォルダーのファイルを取り込むと
+// 「送信済み」になっていない人が送り残しに戻り、その人たちだけの送信ファイルを書き出せる。
 import { Hono } from 'hono';
-import { html } from 'hono/html';
+import { html, raw } from 'hono/html';
 import { q, one, tx } from '../db.js';
 import { page, setFlash, takeFlash, fmtDate } from '../layout.js';
 import { audit } from '../auth.js';
@@ -16,8 +17,8 @@ const app = new Hono();
 const STATUS = {
   draft: html`<span class="pill">作成中</span>`,
   test_sent: html`<span class="pill info">テスト済み</span>`,
-  exported: html`<span class="pill warn">送信中</span>`,
-  sent: html`<span class="pill ok">送信完了</span>`,
+  exported: html`<span class="pill warn">送り残しあり</span>`,
+  sent: html`<span class="pill ok">送信ファイル書き出し済み</span>`,
   cancelled: html`<span class="pill bad">途中で終了</span>`,
 };
 
@@ -27,10 +28,9 @@ const SENT_MARK = '送信済み';
 
 function download(c, rows) {
   const body = writeXlsx({ sheet: config.sendFile.table, table: config.sendFile.table, ...FILE, rows });
-  const name = config.sendFile.name;
   return c.body(body, 200, {
     'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'content-disposition': `attachment; filename="send.xlsx"; filename*=UTF-8''${encodeURIComponent(name)}`,
+    'content-disposition': `attachment; filename="send.xlsx"; filename*=UTF-8''${encodeURIComponent(config.sendFile.name)}`,
   });
 }
 
@@ -48,19 +48,19 @@ app.get('/', async (c) => {
     body: html`
 <div class="row spread"><h1>配信</h1><a class="btn" href="/campaigns/new">新しい配信を作る</a></div>
 <div class="card">
-${list.length ? html`<div class="scroll"><table><thead><tr><th>配信</th><th>送り先</th><th>状態</th><th class="num">送信済み</th><th>日時</th></tr></thead><tbody>
+${list.length ? html`<div class="scroll"><table><thead><tr><th>配信</th><th>送り先</th><th>状態</th><th class="num">送った人数</th><th>日時</th></tr></thead><tbody>
 ${list.map((r) => html`<tr><td><a href="/campaigns/${r.id}">${r.name}</a><div class="small muted">${r.subject}</div></td>
   <td class="small">${r.segment_name ?? '未設定'}</td><td>${STATUS[r.status]}</td>
   <td class="num">${r.p.total ? `${r.p.sent} / ${r.p.total}` : '—'}</td>
-  <td class="small">${fmtDate(r.completed_at ?? r.exported_at ?? r.created_at)}</td></tr>`)}
+  <td class="small">${fmtDate(r.exported_at ?? r.created_at)}</td></tr>`)}
 </tbody></table></div>` : html`<p class="muted">まだ配信はありません。</p>`}
 </div>`,
   });
 });
 
 function steps(status) {
-  const labels = ['1. 本文を書く', '2. テスト', '3. 人数を確認', '4. 送信ファイルで送る', '5. 結果を取り込む'];
-  const cur = { draft: 1, test_sent: 2, exported: 3, sent: 5, cancelled: -1 }[status];
+  const labels = ['1. 本文を書く', '2. 見本を確認', '3. 人数を確認して書き出す', '4. Power Automate で送る'];
+  const cur = { draft: 1, test_sent: 2, exported: 3, sent: 4, cancelled: -1 }[status];
   return html`<ol class="steps">${labels.map((l, i) => html`<li class="${i < cur ? 'done' : i === cur ? 'now' : ''}">${l}</li>`)}</ol>`;
 }
 
@@ -78,7 +78,6 @@ async function form(c, cp) {
     body: html`
 <div><a href="/campaigns" class="small">← 配信一覧</a><h1>${cp ? '配信を編集' : '新しい配信'}</h1></div>
 ${steps(cp?.status ?? 'draft')}
-${cp?.status === 'test_sent' ? html`<div class="flash warn">件名・本文・送り先を変えて保存すると、テストをやり直す必要があります。</div>` : ''}
 <form class="card" method="post" action="${cp ? `/campaigns/${cp.id}` : '/campaigns'}">
   <label>管理用の名前<span class="hint">受け取る人には見えません</span><input type="text" id="name" name="name" value="${cp?.name ?? ''}" required placeholder="例：11月 DXセミナー案内"></label>
   <label>送り先<select id="segment_id" name="segment_id" required><option value="">選んでください</option>
@@ -98,7 +97,7 @@ app.post('/', async (c) => {
   const r = await one(`insert into campaigns (name, subject, body_text, segment_id, from_address, created_by) values ($1,$2,$3,$4,$5,$6) returning id`,
     [b.name, b.subject, b.body_text, b.segment_id || null, config.fromAddress, c.get('user').id]);
   await audit(c, 'campaign.create', 'campaign', r.id);
-  setFlash(c, '保存しました。次は自分あてのテストです。');
+  setFlash(c, '保存しました。届くメールの見本を確認してください。');
   return c.redirect(`/campaigns/${r.id}`);
 });
 
@@ -113,25 +112,24 @@ app.post('/:id{[0-9]+}', async (c) => {
   const id = c.req.param('id');
   const b = await c.req.parseBody();
   const cp = await one(`select * from campaigns where id = $1`, [id]);
-  if (!['draft', 'test_sent'].includes(cp?.status)) { setFlash(c, '送り先を確定した配信は変更できません。', 'bad'); return c.redirect(`/campaigns/${id}`); }
+  if (!['draft', 'test_sent'].includes(cp?.status)) { setFlash(c, '送信ファイルを書き出した配信は変更できません。', 'bad'); return c.redirect(`/campaigns/${id}`); }
   const changed = cp.subject !== b.subject || cp.body_text !== b.body_text || String(cp.segment_id) !== String(b.segment_id);
   await q(`update campaigns set name=$2, subject=$3, body_text=$4, segment_id=$5 ${changed ? `, status='draft', test_sent_at=null` : ''} where id=$1`,
     [id, b.name, b.subject, b.body_text, b.segment_id || null]);
   await audit(c, 'campaign.update', 'campaign', Number(id));
-  const redo = changed && cp.status === 'test_sent';
-  setFlash(c, redo ? '保存しました。内容が変わったので、もう一度テストしてください。' : '保存しました。', redo ? 'warn' : 'ok');
+  setFlash(c, '保存しました。');
   return c.redirect(`/campaigns/${id}`);
 });
 
 // 送信ファイルの扱い方（テストと本番で同じ）
 const howTo = html`<ol class="small" style="margin:0;padding-left:1.4em">
-  <li>OneDrive の「${config.sendFile.name}」を、書き出したファイルで置き換える（同じ名前でアップロードし「置き換え」）</li>
+  <li>共有フォルダーの「${config.sendFile.name}」を、書き出したファイルで置き換える（同じ名前でアップロードし「置き換え」）</li>
   <li>Power Automate で「${config.sendFile.flow}」のフローを開き、「テスト」→「手動」→「フローの実行」</li>
-  <li>終わると、ファイルの「状態」の列に「${SENT_MARK}」と入ります</li></ol>`;
+  <li>1通ずつ間をあけて送られ、送った行の「状態」に「${SENT_MARK}」と入ります</li></ol>`;
 
 // ファイルの書き出しはページが変わらないので、少し待ってから画面を新しくする（確認用サイトでは画面側で行う）
-const reloadAfterDownload = config.demo ? '' : html`<script>document.querySelectorAll('[data-download]').forEach((el) =>
-  el.addEventListener(el.tagName === 'FORM' ? 'submit' : 'click', () => setTimeout(() => location.reload(), 1500)));</script>`;
+const reloadAfterDownload = config.demo ? '' : html`<script>document.querySelectorAll('form[data-download]').forEach((f) =>
+  f.addEventListener('submit', () => { if (f.checkValidity()) setTimeout(() => location.reload(), 1500); }));</script>`;
 
 app.get('/:id{[0-9]+}', async (c) => {
   const cp = await one(`select cp.*, s.name segment_name, s.definition from campaigns cp left join segments s on s.id = cp.segment_id where cp.id = $1`, [c.req.param('id')]);
@@ -149,11 +147,12 @@ app.get('/:id{[0-9]+}', async (c) => {
   ${editable ? html`<a class="btn sub" href="/campaigns/${cp.id}/edit">本文・送り先を編集</a>` : ''}</div>
 ${steps(cp.status)}
 
-<div class="grid2" style="grid-template-columns:minmax(0,3fr) minmax(280px,2fr);align-items:start">
+<div class="grid2 split">
 <div class="card"><h2>届くメールの見本</h2>
-  <div class="small muted">差出人：${cp.from_address}　／　見本の宛先：${sample.full_name} さん</div>
+  <p class="small muted" style="margin:0">実際に届くメールと同じ形で表示しています（文字の大きさや書体は、受け取る人のメールソフトによって変わります）。</p>
+  <div class="small muted">差出人：Social Design Center &lt;${cp.from_address}&gt;　／　見本の宛先：${sample.full_name} さん</div>
   <div><b>件名：</b>${preview.subject}</div>
-  <pre class="mail">${preview.text}</pre>
+  <div class="mail">${raw(preview.html)}</div>
 </div>
 
 <div style="display:grid;gap:16px">
@@ -163,67 +162,80 @@ ${steps(cp.status)}
 </div>
 
 ${editable ? html`
-<form class="card" method="post" action="/campaigns/${cp.id}/test-file" data-download>
-  <h2>2. 自分あてにテストする</h2>
-  <p class="small" style="margin:0">自分あて1通だけのファイルを書き出して送り、届いたメールの見た目を確認します。</p>
-  <label>テストの送り先<input type="email" id="test_to" name="to" value="${user.email}" required></label>
-  <div><button class="${cp.status === 'test_sent' ? 'sub' : ''}">テスト用ファイルを書き出す</button></div>
+<form class="card" method="post" action="/campaigns/${cp.id}/send-file" data-download>
+  <h2>3. 人数を確認して送信ファイルを書き出す</h2>
+  <p style="margin:0">この配信は <b>${n}人</b> に送られます。確認のため、人数を入力してください。</p>
+  <label class="check"><input type="checkbox" id="preview_checked" name="preview_checked" value="1" required> 左の見本で、件名・本文・宛名を確認した</label>
+  <label>送る人数<input type="number" id="confirm_count" name="confirm_count" inputmode="numeric" required></label>
+  <div><button ${n === 0 ? 'disabled' : ''}>送信ファイルを書き出す</button></div>
+  <p class="small muted" style="margin:0">書き出すと、この人たちには送ったものとして記録され、配信は変更できなくなります。</p>
   ${howTo}
-  ${cp.test_sent_at ? html`<div class="small ok">テスト用ファイルを書き出し済み（${fmtDate(cp.test_sent_at)}）</div>` : ''}
 </form>
 
-<form class="card" method="post" action="/campaigns/${cp.id}/confirm">
-  <h2>3. 人数を確認して送り先を確定</h2>
-  ${cp.status !== 'test_sent' ? html`<p class="muted" style="margin:0">テスト用ファイルを書き出すと、ここに進めます。</p>` : html`
-  <p style="margin:0">この配信は <b>${n}人</b> に送られます。確認のため、人数を入力してください。</p>
-  <label class="check"><input type="checkbox" id="test_checked" name="test_checked" value="1" required> テストメールが届き、見た目に問題がないことを確認した</label>
-  <label>送る人数<input type="number" id="confirm_count" name="confirm_count" inputmode="numeric" required></label>
-  <div><button ${n === 0 ? 'disabled' : ''}>送り先を確定する</button></div>`}
-</form>` : ''}
+<details class="card">
+  <summary><b>自分あてにテストする（任意）</b></summary>
+  <form method="post" action="/campaigns/${cp.id}/test-file" data-download style="display:grid;gap:12px;margin-top:12px">
+    <p class="small" style="margin:0">新しい形の文面を初めて送るときなど、受け取ったときの見え方を確かめたいときに使います。自分あて1通だけのファイルを書き出し、本番と同じ手順で送ります。</p>
+    <label>テストの送り先<input type="email" id="test_to" name="to" value="${user.email}" required></label>
+    <div><button class="sub">テスト用ファイルを書き出す</button></div>
+    ${cp.test_sent_at ? html`<div class="small ok">テスト用ファイルを書き出し済み（${fmtDate(cp.test_sent_at)}）</div>` : ''}
+  </form>
+</details>` : ''}
+
+${['sent', 'exported', 'cancelled'].includes(cp.status) ? html`
+<div class="card"><h2>送信の記録</h2>
+  <div class="big">${p.sent}<span style="font-size:18px"> / ${p.total}人</span></div>
+  <div class="small">送り残し ${p.queued}・送らなかった ${p.skipped}（書き出しの前に配信停止になった人など）</div>
+  <div class="small muted">書き出し：${fmtDate(cp.exported_at)}</div>
+</div>` : ''}
 
 ${cp.status === 'exported' ? html`
-<div class="card"><h2>4. 送信ファイルで送る</h2>
-  <div class="big">${p.queued}<span style="font-size:18px">人 まだ送っていない</span></div>
-  <div class="small">送信済み ${p.sent}・送らない ${p.skipped}（確定後に配信停止になった人など）</div>
-  ${p.queued ? html`<div><a class="btn" href="/campaigns/${cp.id}/file" data-download>送信ファイルを書き出す（${p.queued}人分）</a></div>` : ''}
+<form class="card" method="post" action="/campaigns/${cp.id}/rest-file" data-download>
+  <h2>送り残しの人に送る</h2>
+  <p class="small" style="margin:0">送り残しの${p.queued}人だけの送信ファイルを書き出します。</p>
+  <div><button>送り残しの送信ファイルを書き出す（${p.queued}人分）</button></div>
   ${howTo}
-  <p class="small muted" style="margin:0">送信ファイルには、まだ送っていない人だけが入ります。途中で止まったときは、結果を取り込んでから書き出し直すと、残りの人だけのファイルになります。</p>
-</div>
-
-<form class="card" method="post" action="/campaigns/${cp.id}/result" enctype="multipart/form-data">
-  <h2>5. 送り終わったファイルを取り込む</h2>
-  <p class="small" style="margin:0">OneDrive から「${config.sendFile.name}」をダウンロードして取り込むと、「${SENT_MARK}」の人を送信済みとして記録します。</p>
-  ${config.demo ? html`<div class="flash warn">確認用の画面なので、ファイルは選べません。下のボタンで、全員に送ったことにして記録できます。</div>
-  <div><button formaction="/campaigns/${cp.id}/result-sample">全員に送ったことにする（確認用）</button></div>`
-    : html`<label>送り終わったファイル（.xlsx）<input type="file" id="result_file" name="file" accept=".xlsx" required></label>
-  <div><button>取り込む</button></div>`}
 </form>
-
 <form class="card" method="post" action="/campaigns/${cp.id}/cancel">
-  <h2>残りを送らずに終える</h2>
-  <p class="small" style="margin:0">内容に誤りがあったときなどに使います。まだ送っていない${p.queued}人には送らなかったことになります。Power Automate のフローが動いている場合は、先にフローを止めてください。</p>
-  <div><button class="danger">残りを送らずに終える</button></div>
+  <h2>送り残しには送らずに終える</h2>
+  <div><button class="danger">送らずに終える</button></div>
 </form>` : ''}
 
-${['sent', 'cancelled'].includes(cp.status) ? html`
-<div class="card"><h2>送信の結果</h2>
-  <div class="big">${p.sent}<span style="font-size:18px"> / ${p.total}人</span></div>
-  <div class="small">送らなかった ${p.skipped + p.queued}</div>
-  <div class="small muted">確定：${fmtDate(cp.exported_at)}${cp.completed_at ? html`　完了：${fmtDate(cp.completed_at)}` : ''}</div>
-</div>` : ''}
+${cp.status === 'sent' ? html`
+<details class="card">
+  <summary><b>途中で止まったとき</b></summary>
+  <div style="display:grid;gap:12px;margin-top:12px">
+    <p class="small" style="margin:0">Power Automate からエラーのメールが届いたときなど、全員に送れなかったときに使います。共有フォルダーから「${config.sendFile.name}」をダウンロードして取り込むと、「状態」が「${SENT_MARK}」になっていない人が送り残しに戻ります。</p>
+    ${config.demo ? html`<div class="flash warn">確認用の画面なので、ファイルは選べません。</div>`
+      : html`<form method="post" action="/campaigns/${cp.id}/result" enctype="multipart/form-data" style="display:grid;gap:12px">
+      <label>共有フォルダーの「${config.sendFile.name}」（.xlsx）<input type="file" id="result_file" name="file" accept=".xlsx" required></label>
+      <div><button class="sub">取り込む</button></div></form>`}
+  </div>
+</details>` : ''}
 </div>
 </div>
 ${reloadAfterDownload}`,
   });
 });
 
-// テスト：自分あて1行だけのファイル。書き出したらテスト済みとし、確定のときに「届いて確認した」にチェックしてもらう
+// 送り残し（queued）をファイルにし、送信済みとして記録する。書き出す直前に配信停止になった人は外す
+async function exportQueued(run, id) {
+  await run(`update deliveries d set status = 'skipped', last_error = '配信停止済み'
+    where d.campaign_id = $1 and d.status = 'queued' and exists (select 1 from suppressions s where s.email = d.email)`, [id]);
+  const ds = await run(`select d.id, d.email, c.full_name, c.department, c.job_title, o.name org_name
+    from deliveries d left join contacts c on c.id = d.contact_id left join organizations o on o.id = c.organization_id
+    where d.campaign_id = $1 and d.status = 'queued' order by d.id`, [id]);
+  await run(`update deliveries set status = 'sent', sent_at = now() where campaign_id = $1 and status = 'queued'`, [id]);
+  await run(`update campaigns set status = 'sent', completed_at = now() where id = $1`, [id]);
+  return ds;
+}
+
+// 任意のテスト：自分あて1行だけのファイル
 app.post('/:id{[0-9]+}/test-file', async (c) => {
   const id = c.req.param('id');
   const to = String((await c.req.parseBody()).to ?? '').trim();
   const cp = await one(`select cp.*, s.definition from campaigns cp left join segments s on s.id = cp.segment_id where cp.id = $1`, [id]);
   if (!['draft', 'test_sent'].includes(cp?.status)) return c.redirect(`/campaigns/${id}`);
-  if (!cp.segment_id) { setFlash(c, '先に送り先を選んでください。', 'bad'); return c.redirect(`/campaigns/${id}`); }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) { setFlash(c, 'テストの送り先のメールアドレスを確認してください。', 'bad'); return c.redirect(`/campaigns/${id}`); }
   const msg = compose(cp, await sampleContact(cp.definition));
   await q(`update campaigns set status = 'test_sent', test_sent_at = now() where id = $1`, [id]);
@@ -231,59 +243,47 @@ app.post('/:id{[0-9]+}/test-file', async (c) => {
   return download(c, [[to, `[テスト] ${msg.subject}`, msg.html, '', 'テスト']]);
 });
 
-app.post('/:id{[0-9]+}/confirm', async (c) => {
-  const id = c.req.param('id');
+// 本番：人数を確かめて送り先を確定し、そのまま送信ファイルを書き出す
+app.post('/:id{[0-9]+}/send-file', async (c) => {
+  const id = Number(c.req.param('id'));
   const b = await c.req.parseBody();
   const cp = await one(`select cp.*, s.definition from campaigns cp left join segments s on s.id = cp.segment_id where cp.id = $1`, [id]);
-  if (cp?.status !== 'test_sent') { setFlash(c, 'テストが済んでいません。', 'bad'); return c.redirect(`/campaigns/${id}`); }
-  if (!b.test_checked) { setFlash(c, 'テストメールが届いたことを確かめてから確定してください。', 'bad'); return c.redirect(`/campaigns/${id}`); }
+  const back = (text) => { setFlash(c, text, 'bad'); return c.redirect(`/campaigns/${id}`); };
+  if (!['draft', 'test_sent'].includes(cp?.status)) return back('この配信は、もう送信ファイルを書き出しています。');
+  if (!cp.segment_id) return back('先に送り先を選んでください。');
+  if (!b.preview_checked) return back('見本を確認してから書き出してください。');
   const n = await count(cp.definition);
-  if (Number(b.confirm_count) !== n) {
-    setFlash(c, `入力された人数（${b.confirm_count}）が実際の人数（${n}人）と違います。送り先を確認してください。`, 'bad');
-    return c.redirect(`/campaigns/${id}`);
-  }
+  if (Number(b.confirm_count) !== n) return back(`入力された人数（${b.confirm_count}）が実際の人数（${n}人）と違います。送り先を確認してください。`);
   const { where, params } = toSql(cp.definition);
-  await tx(async (run) => {
+  const ds = await tx(async (run) => {
     await run(`insert into deliveries (campaign_id, contact_id, email)
       select $${params.length + 1}, c.id, c.email from sendable_contacts c where ${where}
       on conflict (campaign_id, email) do nothing`, [...params, id]);
-    await run(`update campaigns set status = 'exported', exported_at = now(), confirmed_count = $2, confirmed_by = $3, segment_definition = $4 where id = $1`,
+    await run(`update campaigns set exported_at = now(), confirmed_count = $2, confirmed_by = $3, segment_definition = $4 where id = $1`,
       [id, n, c.get('user').id, JSON.stringify(cp.definition)]);
+    return exportQueued(run, id);
   });
-  await audit(c, 'campaign.confirm', 'campaign', Number(id), { count: n });
-  setFlash(c, `${n}人を送り先として確定しました。送信ファイルを書き出して送ってください。`);
-  return c.redirect(`/campaigns/${id}`);
+  await audit(c, 'campaign.export', 'campaign', id, { count: ds.length });
+  return download(c, ds.map((d) => [d.email, compose(cp, d).subject, compose(cp, d).html, '', String(d.id)]));
 });
 
-// 送信ファイル：まだ送っていない人だけ。確定後に配信停止になった人は、ここで外す
-app.get('/:id{[0-9]+}/file', async (c) => {
-  const id = c.req.param('id');
+// 途中で止まったあと：送り残しだけのファイル
+app.post('/:id{[0-9]+}/rest-file', async (c) => {
+  const id = Number(c.req.param('id'));
   const cp = await one(`select * from campaigns where id = $1`, [id]);
   if (cp?.status !== 'exported') return c.redirect(`/campaigns/${id}`);
-  await q(`update deliveries d set status = 'skipped', last_error = '配信停止済み'
-    where d.campaign_id = $1 and d.status = 'queued' and exists (select 1 from suppressions s where s.email = d.email)`, [id]);
-  const ds = await q(`select d.id, d.email, c.full_name, c.department, c.job_title, o.name org_name
-    from deliveries d left join contacts c on c.id = d.contact_id left join organizations o on o.id = c.organization_id
-    where d.campaign_id = $1 and d.status = 'queued' order by d.id`, [id]);
-  await audit(c, 'campaign.export', 'campaign', Number(id), { count: ds.length });
-  return download(c, ds.map((d) => {
-    const msg = compose(cp, d);
-    return [d.email, msg.subject, msg.html, '', String(d.id)];
-  }));
+  const ds = await tx((run) => exportQueued(run, id));
+  await audit(c, 'campaign.export', 'campaign', id, { count: ds.length, rest: true });
+  return download(c, ds.map((d) => [d.email, compose(cp, d).subject, compose(cp, d).html, '', String(d.id)]));
 });
 
-async function finish(run, id) {
-  await run(`update campaigns set status = 'sent', completed_at = now()
-    where id = $1 and status = 'exported' and not exists (select 1 from deliveries where campaign_id = $1 and status = 'queued')`, [id]);
-}
-
-// 送り終えたファイルを取り込む。ファイルは読むだけで保存しない
+// 途中で止まったとき：共有フォルダーのファイルを取り込み、「送信済み」でない人を送り残しに戻す。ファイルは読むだけで保存しない
 app.post('/:id{[0-9]+}/result', async (c) => {
   const id = Number(c.req.param('id'));
   if (config.demo) return c.text('確認用の画面ではファイルを取り込めません。', 403);
   const back = (text, kind = 'bad') => { setFlash(c, text, kind); return c.redirect(`/campaigns/${id}`); };
   const cp = await one(`select status from campaigns where id = $1`, [id]);
-  if (cp?.status !== 'exported') return back('この配信は結果を取り込める状態ではありません。');
+  if (cp?.status !== 'sent') return back('この配信は結果を取り込める状態ではありません。');
   const file = (await c.req.parseBody()).file;
   if (!file || typeof file === 'string' || !file.size) return back('ファイルを選んでください。');
   let rows;
@@ -296,37 +296,17 @@ app.post('/:id{[0-9]+}/result', async (c) => {
   if (!rows) return back('送信ファイルの形になっていません（「番号」の列がありません）。');
   const [head, ...body] = rows;
   const iNo = head.indexOf('番号'), iState = head.indexOf('状態');
-  if (body.some((r) => r[iNo] === 'テスト')) return back('これはテスト用のファイルです。本番の送信ファイルを取り込んでください。');
-  const sentIds = body.filter((r) => String(r[iState] ?? '').trim() === SENT_MARK).map((r) => Number(r[iNo])).filter(Number.isInteger);
+  if (body.some((r) => r[iNo] === 'テスト')) return back('これはテスト用のファイルです。');
   const ours = new Set((await q(`select id from deliveries where campaign_id = $1`, [id])).map((d) => Number(d.id)));
   if (!body.some((r) => ours.has(Number(r[iNo])))) return back('別の配信のファイルのようです（番号が合いません）。');
-  let marked = 0;
+  const unsent = body.filter((r) => String(r[iState] ?? '').trim() !== SENT_MARK).map((r) => Number(r[iNo])).filter((x) => ours.has(x));
+  if (!unsent.length) return back('ファイルの全員が「送信済み」でした。送り残しはありません。', 'ok');
   await tx(async (run) => {
-    for (const did of sentIds.filter((x) => ours.has(x))) {
-      const r = await run(`update deliveries set status = 'sent', sent_at = now() where id = $1 and status = 'queued' returning id`, [did]);
-      marked += r.length;
-    }
-    await finish(run, id);
+    for (const did of unsent) await run(`update deliveries set status = 'queued', sent_at = null where id = $1 and status = 'sent'`, [did]);
+    await run(`update campaigns set status = 'exported', completed_at = null where id = $1`, [id]);
   });
-  await audit(c, 'campaign.result', 'campaign', id, { marked });
-  const p = await progress(id);
-  return back(p.queued
-    ? `${marked}人を送信済みとして記録しました。まだ送っていない人が${p.queued}人います。送信ファイルを書き出し直すと、その人たちだけが入ります。`
-    : `${marked}人を送信済みとして記録しました。この配信は送信完了です。`, p.queued ? 'warn' : 'ok');
-});
-
-// 確認用サイト専用：ファイルの代わりに、全員に送ったことにする
-app.post('/:id{[0-9]+}/result-sample', async (c) => {
-  if (!config.demo) return c.notFound();
-  const id = Number(c.req.param('id'));
-  await tx(async (run) => {
-    await run(`update deliveries d set status = 'skipped', last_error = '配信停止済み'
-      where d.campaign_id = $1 and d.status = 'queued' and exists (select 1 from suppressions s where s.email = d.email)`, [id]);
-    await run(`update deliveries set status = 'sent', sent_at = now() where campaign_id = $1 and status = 'queued'`, [id]);
-    await finish(run, id);
-  });
-  setFlash(c, '全員に送ったことにして記録しました（確認用）。');
-  return c.redirect(`/campaigns/${id}`);
+  await audit(c, 'campaign.result', 'campaign', id, { unsent: unsent.length });
+  return back(`${unsent.length}人が送り残しでした。「送り残しの送信ファイルを書き出す」から送ってください。`, 'warn');
 });
 
 app.post('/:id{[0-9]+}/cancel', async (c) => {
@@ -336,7 +316,7 @@ app.post('/:id{[0-9]+}/cancel', async (c) => {
     await run(`update campaigns set status = 'cancelled', completed_at = now() where id = $1 and status = 'exported'`, [id]);
   });
   await audit(c, 'campaign.cancel', 'campaign', Number(id));
-  setFlash(c, '残りを送らずに終えました。Power Automate のフローが動いていないかも確認してください。', 'warn');
+  setFlash(c, '送り残しには送らずに終えました。', 'warn');
   return c.redirect(`/campaigns/${id}`);
 });
 

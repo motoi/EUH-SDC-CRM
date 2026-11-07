@@ -159,17 +159,16 @@ create table campaigns (
   from_address     citext not null default 'social-design-center@eikei.ac.jp',
   segment_id       bigint references segments (id),
   segment_definition jsonb,                       -- 送信確定時の条件を固定（後でセグメントを編集しても履歴が変わらない）
-  -- 送信は Power Automate が行う。CRM は送信ファイル（Excel）を書き出し、送り終えたファイルを取り込んで記録する
+  -- 送信は Power Automate が行う。CRM は送信ファイル（Excel）を書き出した時点で送信済みとし、途中で止まったときだけ送り終えたファイルを取り込んで送り残しを戻す
   status           text not null default 'draft'
-                   check (status in ('draft', 'test_sent', 'exported', 'sent', 'cancelled')),
-  test_sent_at     timestamptz,                   -- テスト用ファイルを書き出すまで、送信ファイルは作れない
-  exported_at      timestamptz,                   -- 人数を確認して送り先を確定した日時
+                   check (status in ('draft', 'test_sent', 'exported', 'sent', 'cancelled')),   -- exported：途中で止まり、送り残しがある
+  test_sent_at     timestamptz,                   -- 自分あてのテスト用ファイルを書き出した日時（任意）
+  exported_at      timestamptz,                   -- 人数を確認して送信ファイルを書き出した日時
   confirmed_count  integer,                       -- 確定時に担当者が入力した件数（誤送信防止）
   created_by       bigint references staff_users (id),
   confirmed_by     bigint references staff_users (id),
   created_at       timestamptz not null default now(),
-  completed_at     timestamptz,
-  check (status not in ('exported', 'sent') or test_sent_at is not null)
+  completed_at     timestamptz
 );
 
 create table deliveries (
@@ -178,7 +177,7 @@ create table deliveries (
   contact_id       bigint references contacts (id) on delete set null,
   email            citext not null,               -- 送信時点のアドレスを固定
   status           text not null default 'queued'
-                   check (status in ('queued', 'sent', 'skipped')),   -- queued：まだ送れていない（送信ファイルに入る）
+                   check (status in ('queued', 'sent', 'skipped')),   -- sent：送信ファイルに入れた。queued：送り残し（次の送信ファイルに入る）
   last_error       text,                          -- 送らなかった理由など
   queued_at        timestamptz not null default now(),
   sent_at          timestamptz,

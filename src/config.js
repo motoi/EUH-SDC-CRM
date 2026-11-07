@@ -14,7 +14,7 @@ export const config = {
   fromAddress: env.MAIL_FROM ?? 'social-design-center@eikei.ac.jp',
 
   // 送信は Power Automate が行う。CRM が書き出すファイルの名前・テーブル名と、それを読むフローの名前
-  // （フローは OneDrive のこのファイルを読むので、名前を変えるときはフローも直す）
+  // （フローは共有フォルダーのこのファイルを読むので、名前を変えるときはフローも直す）
   sendFile: { name: '配信.xlsx', table: '送信', flow: 'SDC配信の送信' },
 
   // 特定電子メール法で必要な送信者表示（名称・住所・問い合わせ先）。全メールの末尾に付く

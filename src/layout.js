@@ -69,6 +69,9 @@ h2{font-size:18px;margin:0 0 8px}
 .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 .spread{justify-content:space-between}
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.grid2.split{grid-template-columns:minmax(0,3fr) minmax(260px,2fr);align-items:start}
+.grid2.split.wide{grid-template-columns:minmax(0,2fr) minmax(240px,1fr)}
+@media (max-width:760px){.grid2.split,.grid2.split.wide{grid-template-columns:minmax(0,1fr)}}
 label{display:grid;gap:4px;font-weight:700;font-size:14px}
 label .hint{font-weight:400;color:var(--muted);font-size:13px}
 input[type=text],input[type=email],input[type=number],input[type=date],input[type=datetime-local],input[type=search],select,textarea{
@@ -103,6 +106,8 @@ legend{font-weight:700;padding:0 6px}
 .steps{display:flex;gap:8px;flex-wrap:wrap;list-style:none;padding:0;margin:0}
 .steps li{padding:6px 14px;border-radius:99px;background:var(--bg);color:var(--muted);font-size:14px}
 .steps li.done{background:var(--ok-soft);color:var(--ok)} .steps li.now{background:var(--accent);color:var(--accent-ink);font-weight:700}
+div.mail{background:#fff;padding:16px 20px;border-radius:8px;border:1px solid var(--line);font:15px/1.6 Arial,"Hiragino Sans","Yu Gothic",sans-serif;overflow-wrap:anywhere}
+details.card summary{cursor:pointer}
 pre.mail{white-space:pre-wrap;background:var(--bg);padding:16px;border-radius:8px;font:15px/1.7 inherit;margin:0;border:1px solid var(--line)}
 .pager{display:flex;gap:10px;align-items:center}
 .demo{background:var(--warn-soft);color:var(--warn);font-size:14px;padding:8px 24px;display:flex;gap:16px;flex-wrap:wrap;align-items:center}

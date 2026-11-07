@@ -1,4 +1,4 @@
-// 配信の一連の流れ（リスト作成 → 配信作成 → テスト用ファイル → 人数確認 → 送信ファイル → 結果の取り込み）を通しで確かめる
+// 配信の一連の流れ（リスト作成 → 配信作成 → 見本 →（任意）テスト用ファイル → 人数確認と送信ファイル → 途中で止まったときの取り込み）を通しで確かめる
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -58,65 +58,70 @@ test('配信の一連の流れ', async () => {
   let res = await req('/campaigns', { name: '案内', subject: '{{氏名}}様へご案内', body_text: '{{氏名}} 様\n本文 <b>&</b>', segment_id: '1' });
   assert.equal(res.headers.get('location'), '/campaigns/1');
 
-  // テスト前は確定できない
-  res = await req('/campaigns/1/confirm', { confirm_count: '3', test_checked: '1' });
-  assert.match(flash(res), /テストが済んでいません/);
+  // 見本は実際のメールと同じ HTML（記号はエスケープ済み）で表示される
+  const pageHtml = await (await req('/campaigns/1')).text();
+  assert.match(pageHtml, /<div class="mail"><div lang="ja">試験 a 様<br>\n本文 &lt;b&gt;&amp;&lt;\/b&gt;<br>/);
 
-  // テスト用ファイル：自分あて1行。本文は HTML（改行は <br>、記号はエスケープ）で、末尾に署名と配信停止の案内
+  // 任意のテスト用ファイル：自分あて1行。本文は HTML で、末尾に署名と配信停止の案内
   res = await req('/campaigns/1/test-file', { to: 'staff@example.jp' });
   assert.match(res.headers.get('content-disposition'), /attachment/);
   let s = await sheet(res);
   assert.equal(s.name, '送信');
   assert.deepEqual(s.rows[0], ['宛先', '件名', '本文', '状態', '番号']);
-  assert.equal(s.rows.length, 2);
-  assert.deepEqual([s.rows[1][0], s.rows[1][3], s.rows[1][4]], ['staff@example.jp', '', 'テスト']);
+  assert.deepEqual([s.rows.length, s.rows[1][0], s.rows[1][4]], [2, 'staff@example.jp', 'テスト']);
   assert.match(s.rows[1][1], /^\[テスト\] /);
-  assert.match(s.rows[1][2], /^<div lang="ja">.* 様<br>\n本文 &lt;b&gt;&amp;&lt;\/b&gt;<br>/);
   assert.match(s.rows[1][2], /叡啓大学<br>[\s\S]*「配信停止」とご返信ください。<\/div>$/);
-  assert.equal((await one(`select status from campaigns where id = 1`)).status, 'test_sent');
+  assert.equal((await one(`select count(*)::int n from deliveries`)).n, 0);   // テストでは誰にも送ったことにならない
 
-  // テストメールの確認にチェックがないと確定できない／人数を間違えると確定できない
-  res = await req('/campaigns/1/confirm', { confirm_count: '3' });
-  assert.match(flash(res), /テストメールが届いた/);
-  res = await req('/campaigns/1/confirm', { confirm_count: '4', test_checked: '1' });
+  // 見本確認のチェックがない／人数が違うと書き出せない
+  res = await req('/campaigns/1/send-file', { confirm_count: '3' });
+  assert.match(flash(res), /見本を確認/);
+  res = await req('/campaigns/1/send-file', { confirm_count: '4', preview_checked: '1' });
   assert.match(flash(res), /実際の人数/);
-  await req('/campaigns/1/confirm', { confirm_count: '3', test_checked: '1' });
-  assert.equal((await one(`select count(*)::int n from deliveries where campaign_id = 1`)).n, 3);
 
-  // 確定後に b が配信停止 → 送信ファイルに入らない
+  // 書き出し前に b が配信停止 → 人数から外れ、送信ファイルにも入らない。書き出した人は送信済みとして記録
   await q(`insert into suppressions (email, reason) values ('b@example.com', 'unsubscribe')`);
-  s = await sheet(await req('/campaigns/1/file'));
+  res = await req('/campaigns/1/send-file', { confirm_count: '3', preview_checked: '1' });
+  assert.match(flash(res), /実際の人数（2人）/);
+  res = await req('/campaigns/1/send-file', { confirm_count: '2', preview_checked: '1' });
+  s = await sheet(res);
   assert.deepEqual(s.rows.slice(1).map((r) => r[0]), ['a@example.com', 'e@example.com']);
   assert.equal(s.rows[1][1], '試験 a様へご案内');
-
-  // テスト用のファイルや、ほかの配信のファイルは取り込めない
-  res = await req('/campaigns/1/result', finished([['宛先', '件名', '本文', '状態', '番号'], ['staff@example.jp', 'x', 'x', '送信済み', 'テスト']], ['staff@example.jp']));
-  assert.match(flash(res), /テスト用のファイル/);
-  res = await req('/campaigns/1/result', finished([['宛先', '件名', '本文', '状態', '番号'], ['z@example.com', 'x', 'x', '送信済み', '999']], ['z@example.com']));
-  assert.match(flash(res), /別の配信/);
-
-  // a だけ送れた結果を取り込む → 次の送信ファイルには e だけ
-  res = await req('/campaigns/1/result', finished(s.rows, ['a@example.com']));
-  assert.match(flash(res), /1人を送信済み.*まだ送っていない人が1人/);
-  s = await sheet(await req('/campaigns/1/file'));
-  assert.deepEqual(s.rows.slice(1).map((r) => r[0]), ['e@example.com']);
-
-  res = await req('/campaigns/1/result', finished(s.rows, ['e@example.com']));
-  assert.match(flash(res), /送信完了/);
-  const ds = await q(`select email, status from deliveries order by email`);
-  assert.deepEqual(ds.map((d) => [d.email, d.status]), [['a@example.com', 'sent'], ['b@example.com', 'skipped'], ['e@example.com', 'sent']]);
   assert.equal((await one(`select status from campaigns where id = 1`)).status, 'sent');
+  let ds = await q(`select email, status from deliveries order by email`);
+  assert.deepEqual(ds.map((d) => [d.email, d.status]), [['a@example.com', 'sent'], ['e@example.com', 'sent']]);
+
+  // 二度は書き出せない
+  res = await req('/campaigns/1/send-file', { confirm_count: '2', preview_checked: '1' });
+  assert.match(flash(res), /もう送信ファイルを書き出しています/);
+
+  // 途中で止まったとき：テスト用・ほかの配信のファイルは取り込めない。e が送れていなければ送り残しに戻る
+  res = await req('/campaigns/1/result', finished([['宛先', '件名', '本文', '状態', '番号'], ['staff@example.jp', 'x', 'x', '', 'テスト']], []));
+  assert.match(flash(res), /テスト用のファイル/);
+  res = await req('/campaigns/1/result', finished([['宛先', '件名', '本文', '状態', '番号'], ['z@example.com', 'x', 'x', '', '999']], []));
+  assert.match(flash(res), /別の配信/);
+  res = await req('/campaigns/1/result', finished(s.rows, ['a@example.com']));
+  assert.match(flash(res), /1人が送り残し/);
+  assert.equal((await one(`select status from campaigns where id = 1`)).status, 'exported');
+
+  // 送り残しだけのファイル
+  s = await sheet(await req('/campaigns/1/rest-file', {}));
+  assert.deepEqual(s.rows.slice(1).map((r) => r[0]), ['e@example.com']);
+  assert.equal((await one(`select status from campaigns where id = 1`)).status, 'sent');
+  ds = await q(`select email, status from deliveries where status = 'sent' order by email`);
+  assert.deepEqual(ds.map((d) => d.email), ['a@example.com', 'e@example.com']);
   assert.equal((await req('/campaigns/1')).status, 200);
 });
 
-test('途中で終えると、残りは送らなかったことになる', async () => {
+test('送り残しには送らずに終えられる', async () => {
   await req('/campaigns', { name: '案内2', subject: '件名', body_text: '本文', segment_id: '1' });
-  await req('/campaigns/2/test-file', { to: 'staff@example.jp' });
-  await req('/campaigns/2/confirm', { confirm_count: '2', test_checked: '1' });   // b は配信停止済みなので2人
+  const s = await sheet(await req('/campaigns/2/send-file', { confirm_count: '2', preview_checked: '1' }));
+  await req('/campaigns/2/result', finished(s.rows, []));   // 誰にも送れなかった
+  assert.equal((await one(`select count(*)::int n from deliveries where campaign_id = 2 and status = 'queued'`)).n, 2);
   await req('/campaigns/2/cancel', {});
   assert.equal((await one(`select status from campaigns where id = 2`)).status, 'cancelled');
   assert.equal((await one(`select count(*)::int n from deliveries where campaign_id = 2 and status = 'queued'`)).n, 0);
-  assert.equal((await req('/campaigns/2/file')).status, 302);   // もう書き出せない
+  assert.equal((await req('/campaigns/2/rest-file', {})).status, 302);   // もう書き出せない
 });
 
 test('同じ配信で同じアドレスに二度は送らない', async () => {

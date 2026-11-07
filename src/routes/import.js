@@ -26,7 +26,7 @@ app.get('/', async (c) => {
 <div><a href="/contacts" class="small">← 連絡先一覧</a><h1>Excel から取り込む</h1></div>
 <p class="lead">事務局の Excel をそのまま取り込めます。取り込む前に確認画面が出るので、その時点ではまだ何も変わりません。</p>
 
-<div class="grid2" style="grid-template-columns:minmax(0,3fr) minmax(260px,2fr);align-items:start">
+<div class="grid2 split">
 <form class="card" method="post" action="/contacts/import" enctype="multipart/form-data">
   <h2>1. ファイルと取り込み方を選ぶ</h2>
   ${config.demo ? html`<div class="flash warn">確認用の画面なので、ファイルは選べません。下の「見本のデータで試す」で、架空のデータを使って取り込みの流れを試せます。</div>`
