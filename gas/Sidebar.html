@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  body { font: 13px/1.6 Arial, "Hiragino Sans", "Yu Gothic", sans-serif; color: #1b2530; margin: 0; padding: 12px; }
+  h2 { font-size: 14px; margin: 16px 0 6px; color: #1d6b73; }
+  h2:first-child { margin-top: 0; }
+  details { border: 1px solid #d8dfe6; border-radius: 6px; padding: 4px 8px; margin: 4px 0; }
+  summary { cursor: pointer; font-weight: bold; }
+  .opts label { display: block; font-weight: normal; }
+  .opts .row { display: flex; flex-wrap: wrap; gap: 0 12px; }
+  label.f { display: block; margin: 8px 0 2px; font-weight: bold; }
+  input[type=text], input[type=email], input[type=number], textarea { width: 100%; box-sizing: border-box; font: inherit; padding: 4px 6px; border: 1px solid #b8c2cc; border-radius: 4px; }
+  textarea { min-height: 140px; }
+  button { font: inherit; font-weight: bold; padding: 6px 12px; border-radius: 4px; border: 1px solid #1d6b73; background: #1d6b73; color: #fff; cursor: pointer; margin-top: 8px; }
+  button.sub { background: #fff; color: #1d6b73; }
+  button:disabled { opacity: .5; cursor: default; }
+  .count { font-size: 28px; font-weight: bold; }
+  .muted { color: #5e6b78; font-size: 12px; }
+  .mail { border: 1px solid #d8dfe6; border-radius: 6px; padding: 10px; background: #fff; overflow-wrap: anywhere; }
+  .msg { padding: 8px; border-radius: 4px; margin-top: 8px; }
+  .ok { background: #e3f2e8; color: #2f7d4f; } .bad { background: #f8e3e1; color: #a83a32; } .warn { background: #faf0d6; color: #94660a; }
+</style>
+</head>
+<body>
+<div id="loading" class="muted">名簿を読み込んでいます…</div>
+<div id="app" hidden>
+  <div id="problems" class="msg warn" hidden></div>
+
+  <h2>1. 送り先の条件</h2>
+  <div class="muted">同じ項目の中はどれか1つに当てはまる人、項目どうしはすべてに当てはまる人を選びます。何も選ばなければ全員です。</div>
+  <div id="conds"></div>
+  <div style="margin-top:8px"><span class="count" id="count">-</span> 人</div>
+  <div class="muted" id="countNote"></div>
+
+  <h2>2. 本文</h2>
+  <label class="f" for="name">配信名（受け取る人には見えません）</label><input type="text" id="name" placeholder="例：12月 DXセミナー案内">
+  <label class="f" for="subject">件名</label><input type="text" id="subject">
+  <label class="f" for="body">本文</label>
+  <div class="muted">{{氏名}} {{企業・団体名}} {{部署}} {{役職}} が使えます。末尾の送信者情報と配信停止の案内は自動で付きます。</div>
+  <textarea id="body">{{氏名}} 様
+
+</textarea>
+  <button class="sub" id="previewBtn">見本を表示</button>
+  <div id="preview" hidden>
+    <h2>見本</h2>
+    <div class="muted" id="previewTo"></div>
+    <div><b>件名：</b><span id="previewSubject"></span></div>
+    <div class="mail" id="previewBody"></div>
+  </div>
+
+  <h2>3. 送信シートを作る</h2>
+  <label><input type="checkbox" id="checked"> 見本で、件名・本文・宛名を確認した</label>
+  <label class="f" for="confirm">送る人数（確認のため入力）</label><input type="number" id="confirm" inputmode="numeric">
+  <button id="sendBtn">送信シートを作る</button>
+  <div class="muted">作ったら、Power Automate でフロー「SDC配信の送信」を実行します。1通ずつ間をあけて social-design-center@eikei.ac.jp から送られます。</div>
+
+  <details style="margin-top:12px"><summary>自分あてにテストする（任意）</summary>
+    <label class="f" for="testTo">テストの送り先</label><input type="email" id="testTo">
+    <button class="sub" id="testBtn">テスト用の送信シートを作る</button>
+  </details>
+
+  <div id="msg" class="msg" hidden></div>
+</div>
+
+<script>
+var choices = null;
+var $ = function (id) { return document.getElementById(id); };
+var GROUPS = [
+  ['events', 'イベント'], ['eventStatus', 'イベントの参加状況'], ['interests', '興味分類'], ['levels', '役職区分'],
+  ['sizes', '企業分類1'], ['industries', '企業分類2'], ['prefectures', '団体所在地（都道府県）'], ['excludeEvents', '除外するイベント（申込・参加した人を外す）'],
+];
+
+function show(text, kind) { var m = $('msg'); m.textContent = text; m.className = 'msg ' + kind; m.hidden = false; }
+function fail(e) { show(e.message || String(e), 'bad'); busy(false); }
+function busy(on) { ['sendBtn', 'testBtn', 'previewBtn'].forEach(function (id) { $(id).disabled = on; }); }
+
+function def() {
+  var d = {};
+  GROUPS.forEach(function (g) {
+    d[g[0]] = Array.prototype.map.call(document.querySelectorAll('input[data-g="' + g[0] + '"]:checked'), function (i) { return i.value; });
+  });
+  return d;
+}
+
+function render() {
+  var src = { events: choices.events, eventStatus: choices.statuses, interests: choices.interests, levels: choices.levels,
+    sizes: choices.sizes, industries: choices.industries, prefectures: choices.prefectures, excludeEvents: choices.events };
+  $('conds').innerHTML = '';
+  GROUPS.forEach(function (g) {
+    var items = src[g[0]] || [];
+    if (!items.length) return;
+    var d = document.createElement('details');
+    d.innerHTML = '<summary></summary><div class="opts"><div class="row"></div></div>';
+    d.querySelector('summary').textContent = g[1];
+    var row = d.querySelector('.row');
+    items.forEach(function (v) {
+      var l = document.createElement('label');
+      var i = document.createElement('input');
+      i.type = 'checkbox'; i.value = v; i.setAttribute('data-g', g[0]);
+      if (g[0] === 'eventStatus' && v === '参加') i.checked = true;
+      i.addEventListener('change', recount);
+      l.appendChild(i); l.appendChild(document.createTextNode(' ' + v));
+      row.appendChild(l);
+    });
+    $('conds').appendChild(d);
+  });
+}
+
+function recount() {
+  $('count').textContent = '…';
+  google.script.run.withSuccessHandler(function (r) {
+    $('count').textContent = r.n;
+    var ex = [];
+    if (r.excluded.suppressed) ex.push('配信停止 ' + r.excluded.suppressed + '人');
+    if (r.excluded.noConsent) ex.push('送ってよい根拠が名刺・同意でない ' + r.excluded.noConsent + '人');
+    $('countNote').textContent = r.text + (ex.length ? '（条件に合うが送らない人：' + ex.join('、') + '）' : '');
+  }).withFailureHandler(fail).countRecipients(def());
+}
+
+$('previewBtn').onclick = function () {
+  busy(true);
+  google.script.run.withSuccessHandler(function (p) {
+    busy(false);
+    $('preview').hidden = false;
+    $('previewTo').textContent = '見本の宛先：' + p.to + ' さん';
+    $('previewSubject').textContent = p.subject;
+    $('previewBody').innerHTML = p.html;   // 本文はサーバー側でエスケープ済み
+  }).withFailureHandler(fail).previewMail(def(), $('subject').value, $('body').value);
+};
+
+function afterWrite(r, again) {
+  busy(false);
+  if (r.needConfirm) {
+    if (confirm('「送信」シートに、まだ「送信済み」になっていない行が ' + r.needConfirm.unsent + ' 行あります。前の配信を送り終えていない可能性があります。\n\n消して作り直しますか？')) again();
+    return;
+  }
+  show('「送信」シートを作りました（' + r.n + '人）。Power Automate でフロー「SDC配信の送信」を実行してください。', 'ok');
+}
+
+$('sendBtn').onclick = function () {
+  if (!$('checked').checked) return show('見本を表示して確認し、チェックを入れてください。', 'bad');
+  var run = function (overwrite) {
+    busy(true);
+    google.script.run.withSuccessHandler(function (r) { afterWrite(r, function () { run(true); }); }).withFailureHandler(fail)
+      .writeSendSheet(def(), $('name').value, $('subject').value, $('body').value, $('confirm').value, overwrite);
+  };
+  run(false);
+};
+
+$('testBtn').onclick = function () {
+  var run = function (overwrite) {
+    busy(true);
+    google.script.run.withSuccessHandler(function (r) { afterWrite(r, function () { run(true); }); }).withFailureHandler(fail)
+      .writeTestSheet(def(), $('subject').value, $('body').value, $('testTo').value, overwrite);
+  };
+  run(false);
+};
+
+google.script.run.withSuccessHandler(function (r) {
+  choices = r.choices;
+  $('testTo').value = r.me || '';
+  if (r.problems) { $('problems').textContent = '名簿に直した方がよいところが ' + r.problems + ' 件あります（メニュー「名簿を点検する」で確認できます）。'; $('problems').hidden = false; }
+  $('loading').hidden = true; $('app').hidden = false;
+  render(); recount();
+}).withFailureHandler(function (e) { $('loading').textContent = '読み込めませんでした：' + e.message; }).getChoices();
+</script>
+</body>
+</html>

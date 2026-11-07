@@ -31,6 +31,7 @@ npm run deploy:demo  # site/ を gh-pages ブランチに置く
 - `db/schema.sql`：PostgreSQL のスキーマ（開発時は組み込みの PGlite）
 - `src/`：画面（Hono のサーバー側描画）、Excel の読み書き（`xlsx-read.js` / `xlsx-write.js`）
 - `demo/`：確認用サイトの入口
+- `gas/`：比較用の Google スプレッドシート版（名簿と配信の準備をスプレッドシートで行い、複数人で使える）。設置手順は `gas/README.md`
 - `docs/`：操作テスト・送信テストの手順、開発ボード
 
 ## 本番で送るとき
