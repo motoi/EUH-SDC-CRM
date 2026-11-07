@@ -9,7 +9,30 @@ function onOpen() {
     .addItem('役職区分を付け直す', 'refreshJobLevels')
     .addSeparator()
     .addItem('初期設定（シートを用意する）', 'setup')
+    .addItem('見本データを入れる（架空・試す用）', 'insertSampleData')
     .addToUi();
+}
+
+// 試す用の架空データ。顧客のシートが空のときだけ入れる（本物の名簿を上書きしないため）。アドレスは送信されない example.jp だけ
+function insertSampleData() {
+  var ui = SpreadsheetApp.getUi();
+  var c = ensureSheet_(SHEETS.customers, CUSTOMER_HEADERS);
+  if (c.getLastRow() > 1) { ui.alert('顧客のシートにすでにデータがあるので、見本データは入れませんでした。'); return; }
+  var orgs = [['株式会社サンプル物産', '広島県広島市中区', '中堅企業', '卸売'], ['株式会社サンプル食品', '広島県三原市', '大企業', '食品'],
+    ['サンプル精機株式会社', '広島県福山市', '中小企業', '製造'], ['サンプル大学', '岡山県岡山市', '教育機関', '教育'], ['サンプル市役所（架空）', '広島県呉市', 'その他', '行政']];
+  var people = [['見本 一郎', '代表取締役', '新規事業,DX', '名刺'], ['見本 二郎', '経営企画部長', '新規事業', '名刺'], ['見本 三子', '人事課長', '人材育成,組織開発', '同意'],
+    ['見本 四郎', '主任', 'DX', '名刺'], ['見本 五子', '准教授', 'リベラルアーツ,ソーシャルデザイン', '同意'], ['見本 六郎', '総務部 担当', '地域共創', '名刺'],
+    ['見本 七海', 'マネージャー', '新規事業,サステナビリティ', '同意'], ['見本 八郎', '取締役', 'DX,人材育成', '名刺'], ['見本 九子', '研究員', 'リベラルアーツ', '不明'],
+    ['見本 十郎', '係長', '地域共創,新規事業', '名刺'], ['見本 十一子', 'なし', '人材育成', '名刺'], ['見本 十二郎', '支店長', '新規事業', '同意']];
+  var rows = people.map(function (p, i) {
+    var o = orgs[i % orgs.length];
+    return [p[0], o[0], '', p[1], 'sample' + (i + 1) + '@example.jp', o[1], o[2], o[3], p[2], classifyJobTitle(p[1]), p[3], '見本データ', ''];
+  });
+  c.getRange(2, 1, rows.length, CUSTOMER_HEADERS.length).setValues(rows);
+  var ev = ss_().getSheetByName('DXセミナー 2026秋（見本）') || ss_().insertSheet('DXセミナー 2026秋（見本）');
+  ev.getRange(1, 1, 6, 2).setValues([['メールアドレス', '参加状況'], ['sample1@example.jp', '参加'], ['sample4@example.jp', '参加'], ['sample8@example.jp', '申込'], ['sample2@example.jp', 'キャンセル'], ['sample7@example.jp', '参加']]);
+  ensureSheet_(SHEETS.suppress, SUPPRESS_HEADERS).appendRow(['sample6@example.jp', '本人が配信停止', new Date(), '見本']);
+  ui.alert('架空の見本データを入れました（12人・イベント1件・配信停止1人）。\n本番で使う前に、顧客・見本のイベント・配信停止のシートの見本の行は消してください。');
 }
 
 // 顧客のシートで役職を書き換えたら、役職区分をその場で付ける

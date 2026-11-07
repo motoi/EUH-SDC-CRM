@@ -11,3 +11,4 @@ site/
 *.xlsx
 *.xls
 *.csv
+gas/.clasp.json
