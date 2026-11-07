@@ -10,8 +10,8 @@ const app = new Hono();
 const ACTIONS = {
   'contact.create': '連絡先を追加', 'contact.update': '連絡先を編集', 'contact.suppress': '配信を停止',
   'segment.create': '配信先リストを作成', 'segment.update': '配信先リストを編集',
-  'campaign.create': '配信を作成', 'campaign.update': '配信を編集', 'campaign.test': 'テスト送信',
-  'campaign.confirm': '配信を予約', 'campaign.cancel': '配信を取り消し',
+  'campaign.create': '配信を作成', 'campaign.update': '配信を編集', 'campaign.test': 'テスト用ファイルを書き出し',
+  'campaign.confirm': '送り先を確定', 'campaign.export': '送信ファイルを書き出し', 'campaign.result': '送信結果を取り込み', 'campaign.cancel': '配信を途中で終了',
   'staff.create': '利用者を追加', 'staff.update': '利用者を変更', 'suppression.lift': '配信停止を解除', 'import.apply': 'Excel から取り込み',
 };
 const REASON = { unsubscribe: '本人が配信停止', hard_bounce: '宛先不明で届かない', complaint: '迷惑メール報告', manual: '担当者が停止' };

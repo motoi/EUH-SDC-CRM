@@ -159,16 +159,17 @@ create table campaigns (
   from_address     citext not null default 'social-design-center@eikei.ac.jp',
   segment_id       bigint references segments (id),
   segment_definition jsonb,                       -- 送信確定時の条件を固定（後でセグメントを編集しても履歴が変わらない）
+  -- 送信は Power Automate が行う。CRM は送信ファイル（Excel）を書き出し、送り終えたファイルを取り込んで記録する
   status           text not null default 'draft'
-                   check (status in ('draft', 'test_sent', 'scheduled', 'sending', 'sent', 'cancelled')),
-  test_sent_at     timestamptz,                   -- テスト送信が済むまで予約できない
-  scheduled_at     timestamptz,
+                   check (status in ('draft', 'test_sent', 'exported', 'sent', 'cancelled')),
+  test_sent_at     timestamptz,                   -- テスト用ファイルを書き出すまで、送信ファイルは作れない
+  exported_at      timestamptz,                   -- 人数を確認して送り先を確定した日時
   confirmed_count  integer,                       -- 確定時に担当者が入力した件数（誤送信防止）
   created_by       bigint references staff_users (id),
   confirmed_by     bigint references staff_users (id),
   created_at       timestamptz not null default now(),
   completed_at     timestamptz,
-  check (status not in ('scheduled', 'sending', 'sent') or test_sent_at is not null)
+  check (status not in ('exported', 'sent') or test_sent_at is not null)
 );
 
 create table deliveries (
@@ -177,11 +178,8 @@ create table deliveries (
   contact_id       bigint references contacts (id) on delete set null,
   email            citext not null,               -- 送信時点のアドレスを固定
   status           text not null default 'queued'
-                   check (status in ('queued', 'sent', 'failed', 'bounced', 'skipped')),
-  unsubscribe_token uuid not null default gen_random_uuid() unique,  -- 本文の配信停止リンク用
-  graph_message_id text,                          -- Microsoft Graph の送信結果ID（追跡用）
-  attempts         integer not null default 0,
-  last_error       text,
+                   check (status in ('queued', 'sent', 'skipped')),   -- queued：まだ送れていない（送信ファイルに入る）
+  last_error       text,                          -- 送らなかった理由など
   queued_at        timestamptz not null default now(),
   sent_at          timestamptz,
   unique (campaign_id, email)                     -- 同じ配信で同じアドレスに二度送らない
@@ -191,7 +189,7 @@ create index deliveries_queue_idx on deliveries (campaign_id, status);
 alter table suppressions
   add constraint suppressions_delivery_fk foreign key (delivery_id) references deliveries (id) on delete set null;
 
--- 共有メールボックスに戻ってきた不達・自動応答、配信停止クリックの記録
+-- 共有メールボックスに戻ってきた不達・自動応答、配信停止の返信の記録（今は使っていない。自動仕分けを作るときのため）
 create table mailbox_events (
   id               bigint generated always as identity primary key,
   kind             text not null check (kind in ('hard_bounce', 'soft_bounce', 'auto_reply', 'unsubscribe', 'other')),
@@ -239,13 +237,3 @@ where c.merged_into_id is null
 --     {"field": "event", "event_ids": [15], "status": ["applied", "attended"]}
 --   ]
 -- }
-
--- 確認用の送信箱。送信方式が outbox のとき、実際には送らずここに保存する
-create table outbox_messages (
-  id               bigint generated always as identity primary key,
-  to_address       citext not null,
-  subject          text not null,
-  body_text        text not null,
-  delivery_ref     text,
-  created_at       timestamptz not null default now()
-);

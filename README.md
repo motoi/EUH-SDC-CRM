@@ -1,6 +1,8 @@
 # SDC配信
 
-叡啓大学 社会連携係の、名刺・イベント参加者向けメール配信システム。連絡先・配信先リスト・配信・イベント/興味の4画面と、流量を抑えて送る送信ワーカー、配信停止ページを持つ。送信は大学 M365 の共有メールボックス（social-design-center@eikei.ac.jp）から Microsoft Graph で行う。
+叡啓大学 社会連携係の、名刺・イベント参加者向けメール配信システム。連絡先・配信先リスト・配信・イベント/興味の4画面を持つ。
+
+メールを送るのは Power Automate。CRM は送り先ごとの文面を入れた送信ファイル（Excel、テーブル「送信」）を書き出し、担当者が OneDrive の「配信.xlsx」と置き換えてフローを実行する。フローは大学 M365 の共有メールボックス（social-design-center@eikei.ac.jp）から1通ずつ間をあけて送り、各行の「状態」に「送信済み」と書く。送り終えたファイルを CRM に取り込むと送信記録になる。情報システム部門へのアプリ登録の依頼は不要。
 
 **実在の個人情報（名刺・参加者リストなど）は、このリポジトリにも確認用サイトにも絶対に入れない。** 手元のデータは `.data/` など `.gitignore` 済みの場所にだけ置く。
 
@@ -13,7 +15,7 @@ npm run dev     # http://localhost:3000
 npm test
 ```
 
-初期設定ではメールを実際には送らず、画面の「送信箱（確認用）」に保存する。
+CRM 自体はメールを送らない。
 
 ## 確認用サイト
 
@@ -27,10 +29,10 @@ npm run deploy:demo  # site/ を gh-pages ブランチに置く
 ## 構成
 
 - `db/schema.sql`：PostgreSQL のスキーマ（開発時は組み込みの PGlite）
-- `src/`：画面（Hono のサーバー側描画）、送信ワーカー、送信方式（outbox / graph）
+- `src/`：画面（Hono のサーバー側描画）、Excel の読み書き（`xlsx-read.js` / `xlsx-write.js`）
 - `demo/`：確認用サイトの入口
 - `docs/`：操作テスト・送信テストの手順、開発ボード
 
 ## 本番で送るとき
 
-`.env` に `MAILER=graph` と、情報システム部門から受け取る `GRAPH_TENANT_ID` / `GRAPH_CLIENT_ID` / `GRAPH_CLIENT_SECRET` を設定する。手順は `docs/send-test.md`。
+Power Automate のフローの作り方は `docs/power-automate-flow.md`。送信テストの記録は `docs/send-test.md`。

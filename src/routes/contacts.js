@@ -231,7 +231,7 @@ ${sup ? html`<div class="flash bad">このアドレスには送信しません�
 
 <div class="grid2">
 <div class="card"><h2>最近の配信</h2>
-  ${sent.length ? html`<table><tbody>${sent.map((d) => html`<tr><td><a href="/campaigns/${d.cid}">${d.name}</a></td><td class="small">${d.status === 'sent' ? '送信済み' : d.status === 'skipped' ? '送らなかった' : d.status === 'failed' ? '失敗' : '送信待ち'}</td></tr>`)}</tbody></table>` : html`<p class="muted">まだ送っていません。</p>`}
+  ${sent.length ? html`<table><tbody>${sent.map((d) => html`<tr><td><a href="/campaigns/${d.cid}">${d.name}</a></td><td class="small">${d.status === 'sent' ? '送信済み' : d.status === 'skipped' ? '送らなかった' : 'まだ送っていない'}</td></tr>`)}</tbody></table>` : html`<p class="muted">まだ送っていません。</p>`}
 </div>
 </div>
 

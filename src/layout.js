@@ -7,7 +7,6 @@ const NAV = [
   ['/segments', '配信先リスト'],
   ['/campaigns', '配信'],
   ['/masters', 'イベント・興味'],
-  ...(config.mailer === 'outbox' ? [['/outbox', '送信箱（確認用）']] : []),
 ];
 
 export function page(c, { title, active, body, flash }) {
@@ -96,6 +95,7 @@ a{color:var(--accent)}
 .flash{padding:12px 16px;border-radius:8px;background:var(--ok-soft);color:var(--ok);font-weight:700}
 .flash.bad{background:var(--bad-soft);color:var(--bad)} .flash.warn{background:var(--warn-soft);color:var(--warn)}
 .big{font-size:40px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
+label.check{display:flex;gap:8px;align-items:center;font-weight:400}
 .checks{display:flex;flex-wrap:wrap;gap:6px 18px}
 .checks label{display:flex;gap:6px;align-items:center;font-weight:400;font-size:15px}
 fieldset{border:1px solid var(--line);border-radius:8px;padding:12px 16px;margin:0;display:grid;gap:10px;min-width:0}

@@ -5,11 +5,10 @@ import schema from '../db/schema.sql';
 import { configure, q, tx } from '../src/db.js';
 import { createApp } from '../src/app.js';
 import { seed } from '../src/seed-data.js';
-import { start as startSender } from '../src/sender.js';
 import { reclassifyAll } from '../src/job-level.js';
 
 // スキーマを変えたら番号を上げる（前の版のデータを持っている人も、新しい形で作り直される）
-const DB = 'sdc-demo-v5';
+const DB = 'sdc-demo-v6';
 const JAR_KEY = 'sdc-demo-cookies';
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -41,7 +40,6 @@ try {
 }
 
 const app = createApp();
-startSender();
 
 // ── Cookie（ログイン状態とお知らせ表示）をこのブラウザに保存する
 const jar = new Map(Object.entries(JSON.parse(store.get(JAR_KEY) ?? '{}')));
@@ -86,6 +84,15 @@ window.fetch = async (input, init) => {
 let current = null;
 async function go(path, init, { push = true } = {}) {
   const { path: finalPath, res } = await call(path, init);
+  // ファイルの書き出し：ダウンロードさせて、今の画面を新しくする
+  const disposition = res.headers.get('content-disposition') ?? '';
+  if (disposition.startsWith('attachment')) {
+    const name = decodeURIComponent(/filename\*=UTF-8''([^;]+)/.exec(disposition)?.[1] ?? 'download');
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(await res.blob()), download: name });
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+    return go(current, undefined, { push: false });
+  }
   const type = res.headers.get('content-type') ?? '';
   const body = await res.text();
   const doc = type.includes('html') ? new DOMParser().parseFromString(body, 'text/html') : null;
