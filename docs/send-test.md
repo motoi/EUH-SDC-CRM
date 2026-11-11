@@ -66,3 +66,4 @@ B の結果は、アドレスの種類の確認（開発ボードの確認事項
 | B Power Automate | 2026-11-06 | 成功 | 11/4 は権限がなく NotFound。権限付与後に受信トレイへ3秒で到着、SPF・DKIM・DMARC すべて PASS |
 | B2 1通ずつ送る | 2026-11-07 | 成功 | 5件とも到着、状態の列も更新。改行は `<br>` で解決 |
 | C CRM のファイルで | | | |
+| D Graph から直接 | 2026-11-11 | 送信は成功／範囲の制限は未 | social-design-center@ から SPF・DKIM・DMARC すべて PASS。ただし motoi@eikei.ac.jp からも送れた → 情シスに制限を依頼 |

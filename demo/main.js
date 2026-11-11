@@ -8,7 +8,7 @@ import { seed } from '../src/seed-data.js';
 import { reclassifyAll } from '../src/job-level.js';
 
 // スキーマを変えたら番号を上げる（前の版のデータを持っている人も、新しい形で作り直される）
-const DB = 'sdc-demo-v7';
+const DB = 'sdc-demo-v8';
 const JAR_KEY = 'sdc-demo-cookies';
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },

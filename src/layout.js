@@ -7,6 +7,7 @@ const NAV = [
   ['/segments', '配信先リスト'],
   ['/campaigns', '配信'],
   ['/masters', 'イベント・興味'],
+  ...(config.sendMode === 'outbox' ? [['/outbox', '送信箱（確認用）']] : []),
 ];
 
 export function page(c, { title, active, body, flash }) {

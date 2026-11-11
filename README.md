@@ -34,6 +34,16 @@ npm run deploy:demo  # site/ を gh-pages ブランチに置く
 - `gas/`：比較用の Google スプレッドシート版（名簿と配信の準備をスプレッドシートで行い、複数人で使える）。設置手順は `gas/README.md`
 - `docs/`：操作テスト・送信テストの手順、開発ボード
 
-## 本番で送るとき
+## 送り方の切り替え
 
-Power Automate のフローの作り方は `docs/power-automate-flow.md`。送信テストの記録は `docs/send-test.md`。
+`.env` の `SEND_MODE` で選ぶ（`.env` は GitHub に上がらない。`npm run dev` / `npm start` が読み込む）。
+
+| SEND_MODE | 送り方 | 必要なもの |
+|---|---|---|
+| `export`（既定） | 送信ファイル（Excel）を書き出し、Power Automate で送る | Power Automate のフロー（`docs/power-automate-flow.md`） |
+| `graph` | CRM が Microsoft Graph で共有メールボックスから直接、予約した時刻に1分10通ずつ送る | 情シスのアプリ登録（`GRAPH_TENANT_ID` / `GRAPH_CLIENT_ID` / `GRAPH_CLIENT_SECRET`）。**送れる範囲を social-design-center@ だけに制限してもらってから使う** |
+| `outbox` | `graph` と同じ画面と流れで、実際には送らず「送信箱（確認用）」に保存する | なし |
+
+どちらの形でも、配信停止は本文末尾の案内（「配信停止」と返信）で受け付け、担当者が連絡先の画面で止める。
+
+送信テストの記録は `docs/send-test.md`。

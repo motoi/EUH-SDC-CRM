@@ -13,6 +13,20 @@ export const config = {
 
   fromAddress: env.MAIL_FROM ?? 'social-design-center@eikei.ac.jp',
 
+  // 送り方。'export'：送信ファイル（Excel）を書き出し、Power Automate で送る（アプリ登録なしで使える）
+  //         'graph' ：CRM が Microsoft Graph で共有メールボックスから直接送る（.env に情シスのアプリ登録の値が要る）
+  //         'outbox'：直接送る流れを、実際には送らずに試す（送信箱に保存するだけ）
+  sendMode: demo ? 'export' : (env.SEND_MODE ?? 'export'),
+  graph: {
+    tenantId: env.GRAPH_TENANT_ID,
+    clientId: env.GRAPH_CLIENT_ID,
+    clientSecret: env.GRAPH_CLIENT_SECRET,
+  },
+  // 直接送るときの流量。M365 の上限（1分30通、1日1万受信者）よりかなり低く抑える
+  sendPerMinute: Number(env.SEND_PER_MINUTE ?? 10),
+  sendPerDay: Number(env.SEND_PER_DAY ?? 1500),
+  sendTickSeconds: Number(env.SEND_TICK_SECONDS ?? 60),
+
   // 送信は Power Automate が行う。CRM が書き出すファイルの名前・テーブル名と、それを読むフローの名前
   // （フローは共有フォルダーのこのファイルを読むので、名前を変えるときはフローも直す）
   sendFile: { name: '配信.xlsx', table: '送信', flow: 'SDC配信の送信' },

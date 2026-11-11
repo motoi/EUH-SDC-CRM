@@ -159,16 +159,20 @@ create table campaigns (
   from_address     citext not null default 'social-design-center@eikei.ac.jp',
   segment_id       bigint references segments (id),
   segment_definition jsonb,                       -- 送信確定時の条件を固定（後でセグメントを編集しても履歴が変わらない）
-  -- 送信は Power Automate が行う。CRM は送信ファイル（Excel）を書き出した時点で送信済みとし、途中で止まったときだけ送り終えたファイルを取り込んで送り残しを戻す
+  -- 送り方は2つ（src/config.js の sendMode）。
+  --   書き出す形：送信ファイル（Excel）を書き出した時点で送信済み。途中で止まったときは exported（送り残しあり）
+  --   直接送る形：予約すると scheduled → sending → sent と進み、CRM が少しずつ送る
   status           text not null default 'draft'
-                   check (status in ('draft', 'test_sent', 'exported', 'sent', 'cancelled')),   -- exported：途中で止まり、送り残しがある
+                   check (status in ('draft', 'test_sent', 'scheduled', 'sending', 'exported', 'sent', 'cancelled')),
   test_sent_at     timestamptz,                   -- 自分あてのテスト用ファイルを書き出した日時（任意）
-  exported_at      timestamptz,                   -- 人数を確認して送信ファイルを書き出した日時
+  exported_at      timestamptz,                   -- 人数を確認して送信ファイルを書き出した日時（書き出す形）
+  scheduled_at     timestamptz,                   -- 送信開始の予約日時（直接送る形）
   confirmed_count  integer,                       -- 確定時に担当者が入力した件数（誤送信防止）
   created_by       bigint references staff_users (id),
   confirmed_by     bigint references staff_users (id),
   created_at       timestamptz not null default now(),
-  completed_at     timestamptz
+  completed_at     timestamptz,
+  check (status not in ('scheduled', 'sending') or test_sent_at is not null)   -- 直接送る形は、テスト送信が済むまで予約できない
 );
 
 create table deliveries (
@@ -177,8 +181,9 @@ create table deliveries (
   contact_id       bigint references contacts (id) on delete set null,
   email            citext not null,               -- 送信時点のアドレスを固定
   status           text not null default 'queued'
-                   check (status in ('queued', 'sent', 'skipped')),   -- sent：送信ファイルに入れた。queued：送り残し（次の送信ファイルに入る）
-  last_error       text,                          -- 送らなかった理由など
+                   check (status in ('queued', 'sent', 'failed', 'skipped')),   -- queued：まだ送っていない。sent：送った（書き出す形では送信ファイルに入れた）
+  attempts         integer not null default 0,    -- 直接送る形で、送ろうとした回数
+  last_error       text,                          -- 送らなかった理由・失敗の内容
   queued_at        timestamptz not null default now(),
   sent_at          timestamptz,
   unique (campaign_id, email)                     -- 同じ配信で同じアドレスに二度送らない
@@ -236,3 +241,13 @@ where c.merged_into_id is null
 --     {"field": "event", "event_ids": [15], "status": ["applied", "attended"]}
 --   ]
 -- }
+
+-- 確認用の送信箱。送り方が outbox のとき、実際には送らずここに保存する
+create table outbox_messages (
+  id               bigint generated always as identity primary key,
+  to_address       citext not null,
+  subject          text not null,
+  body_text        text not null,
+  delivery_ref     text,
+  created_at       timestamptz not null default now()
+);
