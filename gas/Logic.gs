@@ -9,7 +9,7 @@ var CUSTOMER_HEADERS = ['氏名', '企業・団体名', '部署', '役職', 'メ
   '役職区分', '送ってよい根拠', '入手経路', 'メモ'];
 var SUPPRESS_HEADERS = ['メールアドレス', '理由', '日付', 'メモ'];
 var SEND_HEADERS = ['宛先', '件名', '本文', '状態', '番号'];
-var HISTORY_HEADERS = ['日時', '担当者', '配信名', '件名', '人数', '条件', '本文'];
+var HISTORY_HEADERS = ['日時', '担当者', '配信名', '件名', '人数', '条件', '本文', '種類'];
 
 // 「送ってよい根拠」：名刺（名刺交換など書面で受け取った）・同意（フォーム等で案内の受信に同意）だけが送る対象。空欄と「不明」は送らない
 var CONSENT_OK = ['名刺', '同意'];
@@ -46,6 +46,22 @@ function norm_(v) { return String(v == null ? '' : v).normalize('NFKC').trim(); 
 function normEmail(v) { return norm_(v).toLowerCase(); }
 function isEmail(v) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
 function blankIfNone_(v) { var s = String(v == null ? '' : v).trim(); return /^(なし|無し|-|－|ー)$/.test(s) ? '' : s; }
+
+// 件名と本文の「指紋」。テスト配信した文面と、本番で送ろうとしている文面が同じかを確かめるのに使う
+// （1文字でも直したら指紋が変わり、テストのやり直しが必要になる）
+function fingerprint(subject, body) {
+  var s = String(subject) + '\n--\n' + String(body).replace(/\r\n/g, '\n');
+  var h1 = 5381, h2 = 52711;
+  for (var i = 0; i < s.length; i++) { var c = s.charCodeAt(i); h1 = ((h1 * 33) ^ c) >>> 0; h2 = ((h2 * 31) ^ c) >>> 0; }
+  return 'h' + h1.toString(16) + h2.toString(16);
+}
+
+// 「a@example.jp, b@example.jp」のような入力を、アドレスの一覧にする
+function parseEmails(text) {
+  var seen = {};
+  return String(text == null ? '' : text).split(/[,、;；\s]+/).map(normEmail)
+    .filter(function (e) { if (!e || seen[e]) return false; seen[e] = true; return true; });
+}
 
 function classifyJobTitle(title) {
   var t = norm_(title);

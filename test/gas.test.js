@@ -107,32 +107,49 @@ test('本文は差し込み・エスケープ・改行の <br> 化をし、署�
   assert.match(m.html, /「配信停止」とご返信ください。<\/div>$/);
 });
 
-test('送信シートを作る：人数の確認、作り直しの確認、配信履歴', async () => {
+test('送信シートを作る：テスト配信が必須、人数の確認、作り直しの確認、配信履歴', async () => {
   const t = await load([['顧客', CUSTOMERS.map((r) => [...r])], ['DXセミナー', EVENT], ['配信停止', SUPPRESS]]);
   t.ctx.setup();
   assert.deepEqual(t.sheet('送信').rows[0], ['宛先', '件名', '本文', '状態', '番号']);
   assert.equal(t.sheet('顧客').rows[1][9], '経営層');   // 初期設定で役職区分が付く
   assert.deepEqual(t.ctx.countRecipients({}).n, 3);
+  const SUBJECT = '{{氏名}}様へ', BODY = '{{氏名}} 様\n本文';
 
-  assert.throws(() => t.ctx.writeSendSheet({}, '案内', '件名', '本文', 4, false), /実際の人数（3人）/);
-  let r = t.ctx.writeSendSheet({}, '案内', '{{氏名}}様へ', '{{氏名}} 様', 3, false);
-  assert.deepEqual({ ...r }, { ok: true, n: 3 });
-  const send = t.sheet('送信').rows;
-  assert.deepEqual(send.slice(1).map((x) => [x[0], x[1], x[3], x[4]]), [
+  // テスト配信の前は、本番の送信シートを作れない
+  assert.throws(() => t.ctx.writeSendSheet({}, '案内', SUBJECT, BODY, 3, false, true), /テスト配信がまだです/);
+
+  // テスト配信：送り先は複数入れられる。形が正しくなければ作らない
+  assert.throws(() => t.ctx.writeTestSheet({}, '案内', SUBJECT, BODY, 'staff@example.jp, bad', false), /確認してください：bad/);
+  let r = t.ctx.writeTestSheet({}, '案内', SUBJECT, BODY, 'staff@example.jp、 Check@Example.jp', false);
+  assert.deepEqual(plain(r), { ok: true, n: 2, test: true });
+  assert.deepEqual(t.sheet('送信').rows.slice(1).map((x) => [x[0], x[1], x[4]]), [
+    ['staff@example.jp', '[テスト] 見本 一郎様へ', 'テスト'], ['check@example.jp', '[テスト] 見本 一郎様へ', 'テスト']]);
+  assert.match(t.sheet('配信履歴').rows[1][7], /^テスト:h[0-9a-f]+$/);
+
+  // テスト後も、確認のチェック・人数が合わなければ作れない。本文を直したらテストのやり直し
+  assert.throws(() => t.ctx.writeSendSheet({}, '案内', SUBJECT, BODY, 3, false, false), /チェックを入れてください/);
+  assert.throws(() => t.ctx.writeSendSheet({}, '案内', SUBJECT, BODY, 4, false, true), /実際の人数（3人）/);
+  assert.throws(() => t.ctx.writeSendSheet({}, '案内', SUBJECT, BODY + '（修正）', 3, false, true), /テスト配信がまだです/);
+
+  // 本番：テスト用の行が残っていても、確認なしで作り直す
+  r = t.ctx.writeSendSheet({}, '案内', SUBJECT, BODY, 3, false, true);
+  assert.deepEqual(plain(r), { ok: true, n: 3 });
+  assert.deepEqual(t.sheet('送信').rows.slice(1).map((x) => [x[0], x[1], x[3], x[4]]), [
     ['ichiro@example.jp', '見本 一郎様へ', '', '20261108-1000-1'],
     ['jiro@example.jp', '見本 二郎様へ', '', '20261108-1000-2'],
     ['mitsuko@example.jp', '見本 三子様へ', '', '20261108-1000-3'],
   ]);
-  assert.equal(t.sheet('配信履歴').rows.length, 2);
+  assert.deepEqual(t.sheet('配信履歴').rows.map((x) => x[7]).slice(2), ['本番']);
 
-  // まだ送っていない行が残っているときは、確認してから作り直す
-  r = t.ctx.writeTestSheet({}, '件名', '本文', 'staff@example.jp', false);
+  // 本番の行がまだ送られていないときは、確認してから作り直す
+  r = t.ctx.writeTestSheet({}, '次の案内', '件名', '本文', 'staff@example.jp', false);
   assert.equal(r.needConfirm.unsent, 3);
-  r = t.ctx.writeTestSheet({}, '件名', '本文', 'staff@example.jp', true);
-  assert.equal(r.ok, true);
-  assert.deepEqual(t.sheet('送信').rows.slice(1).map((x) => [x[0], x[1], x[4]]), [['staff@example.jp', '[テスト] 件名', 'テスト']]);
+  assert.equal(t.ctx.writeTestSheet({}, '次の案内', '件名', '本文', 'staff@example.jp', true).ok, true);
+});
 
-  // 送り終えた行（送信済み）だけなら、確認なしで作り直せる
-  t.sheet('送信').rows[1][3] = '送信済み';
-  assert.equal(t.ctx.writeTestSheet({}, '件名', '本文', 'staff@example.jp', false).ok, true);
+test('前の版で作った配信履歴のシートには「種類」の列を足す', async () => {
+  const t = await load([['顧客', CUSTOMERS.map((r) => [...r])], ['配信履歴', [['日時', '担当者', '配信名', '件名', '人数', '条件', '本文']]]]);
+  t.ctx.writeTestSheet({}, '案内', '件名', '本文', 'staff@example.jp', false);
+  assert.equal(t.sheet('配信履歴').rows[0][7], '種類');
+  assert.equal(t.ctx.writeSendSheet({}, '案内', '件名', '本文', 4, false, true).ok, true);   // このテストには配信停止のシートがないので4人
 });

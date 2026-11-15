@@ -132,12 +132,12 @@ function previewMail(def, subject, body) {
   return { subject: m.subject, html: m.html, to: sample.name };
 }
 
-// 今の「送信」シートの様子（作り直す前に知らせるため）
+// 今の「送信」シートの様子（作り直す前に知らせるため）。テスト用の行は数えない
 function sendSheetState_() {
   var sh = ss_().getSheetByName(SHEETS.send);
   if (!sh || sh.getLastRow() < 2) return { rows: 0, unsent: 0 };
   var v = sh.getRange(2, 1, sh.getLastRow() - 1, SEND_HEADERS.length).getValues();
-  return { rows: v.length, unsent: v.filter(function (r) { return r[0] && String(r[3]).trim() !== '送信済み'; }).length };
+  return { rows: v.length, unsent: v.filter(function (r) { return r[0] && String(r[4]) !== 'テスト' && String(r[3]).trim() !== '送信済み'; }).length };
 }
 
 function writeSendRows_(rows) {
@@ -146,26 +146,53 @@ function writeSendRows_(rows) {
   if (rows.length) sh.getRange(2, 1, rows.length, SEND_HEADERS.length).setValues(rows);
 }
 
-// 自分あて1行だけの「送信」シートを作る（任意のテスト）
-function writeTestSheet(def, subject, body, to, overwrite) {
-  to = normEmail(to);
-  if (!isEmail(to)) throw new Error('テストの送り先のメールアドレスを確認してください。');
+// 配信履歴のシート。前の版で作ったシートに「種類」の列がなければ足す
+function historySheet_() {
+  var sh = ensureSheet_(SHEETS.history, HISTORY_HEADERS);
+  var header = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+  if (header.indexOf('種類') < 0) sh.getRange(1, header.length + 1, 1, 1).setValues([['種類']]);
+  return sh;
+}
+
+// これまでにテスト配信した文面の指紋
+function testedFingerprints_() {
+  var sh = ss_().getSheetByName(SHEETS.history);
+  var out = {};
+  if (!sh || sh.getLastRow() < 2) return out;
+  var v = sh.getDataRange().getValues(), col = v[0].indexOf('種類');
+  if (col < 0) return out;
+  for (var i = 1; i < v.length; i++) { var m = /^テスト:(h[0-9a-f]+)$/.exec(String(v[i][col])); if (m) out[m[1]] = true; }
+  return out;
+}
+
+// テスト配信（必須）：テスト用の送り先だけの「送信」シートを作る。本番と同じ手順（フローの実行）で送って、届いたメールを確かめる
+function writeTestSheet(def, name, subject, body, toText, overwrite) {
+  if (!String(subject || '').trim() || !String(body || '').trim()) throw new Error('件名と本文を入れてください。');
+  var emails = parseEmails(toText);
+  if (!emails.length) throw new Error('テストの送り先を入れてください。');
+  var bad = emails.filter(function (e) { return !isEmail(e); });
+  if (bad.length) throw new Error('テストの送り先のメールアドレスを確認してください：' + bad.join('、'));
+  if (emails.length > 10) throw new Error('テストの送り先は10件までにしてください。');
   var lock = LockService.getDocumentLock(); lock.waitLock(20000);
   try {
     var st = sendSheetState_();
     if (st.unsent && !overwrite) return { needConfirm: st };
     var r = selectRecipients(buildModel(readTables_()), def);
-    var m = compose(subject, body, r.list[0] || { name: 'サンプル 太郎' });
-    writeSendRows_([[to, '[テスト] ' + m.subject, m.html, '', 'テスト']]);
-    return { ok: true, n: 1 };
+    var m = compose(subject, body, r.list[0] || { name: 'サンプル 太郎', org: '株式会社サンプル', department: '新規事業部', title: '部長' });
+    writeSendRows_(emails.map(function (to) { return [to, '[テスト] ' + m.subject, m.html, '', 'テスト']; }));
+    historySheet_().appendRow([new Date(), Session.getActiveUser().getEmail(), '[テスト] ' + String(name || '').trim(), subject, emails.length,
+      'テストの送り先：' + emails.join('、'), body, 'テスト:' + fingerprint(subject, body)]);
+    return { ok: true, n: emails.length, test: true };
   } finally { lock.releaseLock(); }
 }
 
-// 本番の「送信」シートを作る。人数の確認が合わなければ作らない。配信履歴に残す
-function writeSendSheet(def, name, subject, body, confirmCount, overwrite) {
+// 本番の「送信」シートを作る。同じ件名・本文でテスト配信が済んでいて、人数の確認が合うときだけ作る。配信履歴に残す
+function writeSendSheet(def, name, subject, body, confirmCount, overwrite, testChecked) {
   if (!String(name || '').trim() || !String(subject || '').trim() || !String(body || '').trim()) throw new Error('配信名・件名・本文を入れてください。');
   var lock = LockService.getDocumentLock(); lock.waitLock(20000);
   try {
+    if (!testedFingerprints_()[fingerprint(subject, body)]) throw new Error('この件名・本文でのテスト配信がまだです。先にテスト配信をしてください（件名や本文を直したときは、テストをやり直します）。');
+    if (!testChecked) throw new Error('テストメールが届いたことを確かめて、チェックを入れてください。');
     var r = selectRecipients(buildModel(readTables_()), def);
     if (Number(confirmCount) !== r.list.length) throw new Error('入力された人数（' + confirmCount + '）が実際の人数（' + r.list.length + '人）と違います。条件を確かめてください。');
     var st = sendSheetState_();
@@ -175,7 +202,7 @@ function writeSendSheet(def, name, subject, body, confirmCount, overwrite) {
       var m = compose(subject, body, c);
       return [c.email, m.subject, m.html, '', stamp + '-' + (i + 1)];
     }));
-    ensureSheet_(SHEETS.history, HISTORY_HEADERS).appendRow([new Date(), Session.getActiveUser().getEmail(), name, subject, r.list.length, describe(def), body]);
+    historySheet_().appendRow([new Date(), Session.getActiveUser().getEmail(), name, subject, r.list.length, describe(def), body, '本番']);
     return { ok: true, n: r.list.length };
   } finally { lock.releaseLock(); }
 }
