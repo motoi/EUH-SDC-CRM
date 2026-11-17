@@ -27,7 +27,9 @@ export function footer() {
 // 文字をエスケープし、改行を <br> にする。lang="ja" は Gmail が英語と取り違えないようにするため
 export function toHtml(text) {
   const esc = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  return `<div lang="ja">${esc.replace(/\r?\n/g, '<br>\n')}</div>`;
+  // 末尾の \u200B（見えない文字）は、Exchange に本文を UTF-8 のまま送らせるための目印。
+  // これがないと iso-2022-jp に変換され、Gmail で「英語で書かれているようです」と出て末尾が省略表示される（送信テストL で確認）
+  return `<div lang="ja">${esc.replace(/\r?\n/g, '<br>\n')}\u200B</div>`;
 }
 
 export function compose(campaign, contact) {

@@ -104,7 +104,7 @@ test('本文は差し込み・エスケープ・改行の <br> 化をし、署�
   const m = ctx.compose('{{氏名}}様へ', '{{氏名}} 様\n<b>&</b>', { name: '見本 一郎' });
   assert.equal(m.subject, '見本 一郎様へ');
   assert.match(m.html, /^<div lang="ja">見本 一郎 様<br>\n&lt;b&gt;&amp;&lt;\/b&gt;<br>\n<br>\n\*+<br>\n広島県公立大学法人　叡啓大学<br>/);
-  assert.match(m.html, /「配信停止」とご返信ください。<\/div>$/);
+  assert.match(m.html, /「配信停止」とご返信ください。\u200B<\/div>$/);
 });
 
 test('送信シートを作る：テスト配信が必須、人数の確認、作り直しの確認、配信履歴', async () => {

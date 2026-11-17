@@ -70,7 +70,7 @@ test('配信の一連の流れ', async () => {
   assert.deepEqual(s.rows[0], ['宛先', '件名', '本文', '状態', '番号']);
   assert.deepEqual([s.rows.length, s.rows[1][0], s.rows[1][4]], [2, 'staff@example.jp', 'テスト']);
   assert.match(s.rows[1][1], /^\[テスト\] /);
-  assert.match(s.rows[1][2], /叡啓大学<br>[\s\S]*「配信停止」とご返信ください。<\/div>$/);
+  assert.match(s.rows[1][2], /叡啓大学<br>[\s\S]*「配信停止」とご返信ください。\u200B<\/div>$/);
   assert.equal((await one(`select count(*)::int n from deliveries`)).n, 0);   // テストでは誰にも送ったことにならない
 
   // 見本確認のチェックがない／人数が違うと書き出せない
