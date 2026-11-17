@@ -33,7 +33,7 @@ export async function tick() {
         }
         const msg = compose(d, d);
         try {
-          await mailer.send({ to: d.email, subject: msg.subject, text: msg.text, deliveryId: d.id });
+          await mailer.send({ to: d.email, subject: msg.subject, text: msg.text, html: msg.html, deliveryId: d.id });
           await q(`update deliveries set status = 'sent', sent_at = now(), attempts = attempts + 1 where id = $1`, [d.id]);
           sent++;
         } catch (e) {

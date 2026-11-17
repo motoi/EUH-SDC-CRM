@@ -16,7 +16,7 @@ globalThis.fetch = async (url, init) => {
 };
 const { mailer, RetryLater } = await import('../src/mailer.js');
 
-test('共有メールボックスから、テキストで、送信済みフォルダーに残さずに送る', async () => {
+test('共有メールボックスから、送信済みフォルダーに残さずに送る（html があれば HTML で）', async () => {
   await mailer.send({ to: 'a@example.com', subject: '件名', text: '本文\n2行目', deliveryId: 7 });
   const [tok, send] = calls;
   assert.match(tok.url, /login\.microsoftonline\.com\/tenant-test\/oauth2\/v2\.0\/token/);
@@ -26,6 +26,8 @@ test('共有メールボックスから、テキストで、送信済みフォ�
   assert.deepEqual(body.message.body, { contentType: 'Text', content: '本文\n2行目' });
   assert.deepEqual(body.message.toRecipients, [{ emailAddress: { address: 'a@example.com' } }]);
   assert.equal(body.saveToSentItems, false);
+  await mailer.send({ to: 'a@example.com', subject: '件名', text: '本文', html: '<div lang="ja">本文</div>', deliveryId: 8 });
+  assert.deepEqual(JSON.parse(calls.at(-1).init.body).message.body, { contentType: 'HTML', content: '<div lang="ja">本文</div>' });
 });
 
 test('混雑（429）のときは、あとでやり直す', async () => {

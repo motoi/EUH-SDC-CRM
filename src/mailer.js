@@ -1,5 +1,6 @@
 // 直接送るときの送信部分（送り方が 'graph' か 'outbox' のとき）。send({ to, subject, text, deliveryId }) だけを外に出す。
 //   outbox：実際には送らず outbox_messages に保存する（操作の確認用）
+//   本文は html があれば HTML で送る（テキストのままだと Gmail が「英語のメール」と判定し、末尾を省略表示したため）
 //   graph ：Microsoft Graph で共有メールボックスから送る（情シスのアプリ登録。送れる範囲は共有メールボックスだけに制限してもらう）
 import { one } from './db.js';
 import { config } from './config.js';
@@ -32,14 +33,14 @@ async function graphToken() {
 }
 
 const graph = {
-  async send({ to, subject, text, deliveryId }) {
+  async send({ to, subject, text, html, deliveryId }) {
     const res = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(config.fromAddress)}/sendMail`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${await graphToken()}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message: {
           subject,
-          body: { contentType: 'Text', content: text },
+          body: html ? { contentType: 'HTML', content: html } : { contentType: 'Text', content: text },
           toRecipients: [{ emailAddress: { address: to } }],
           // Graph で付けられるのは x- で始まる独自ヘッダーだけ。戻ってきた不達メールと配信を突き合わせるのに使う
           internetMessageHeaders: [{ name: 'X-SDC-Delivery', value: String(deliveryId ?? 'test') }],
