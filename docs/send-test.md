@@ -67,3 +67,4 @@ B の結果は、アドレスの種類の確認（開発ボードの確認事項
 | B2 1通ずつ送る | 2026-11-07 | 成功 | 5件とも到着、状態の列も更新。改行は `<br>` で解決 |
 | C CRM のファイルで | | | |
 | D Graph から直接 | 2026-11-11 | 送信は成功／範囲の制限は未 | social-design-center@ から SPF・DKIM・DMARC すべて PASS。ただし motoi@eikei.ac.jp からも送れた → 情シスに制限を依頼 |
+| D2 範囲の制限 | 2026-11-17 | 成功 | 情シスが Entra ID 側の Mail.Send の同意を取り消し。social-design-center@ は 202、motoi@eikei.ac.jp は 403（ErrorAccessDenied）。トークンの roles は空 |
