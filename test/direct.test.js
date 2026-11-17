@@ -76,4 +76,5 @@ test('送信箱（確認用）で、送ったことにしたメールを読め�
   assert.match(await res.text(), /試験 a様へご案内/);
   const m = await one(`select body_text from outbox_messages where to_address = 'a@example.com'`);
   assert.match(m.body_text, /「配信停止」とご返信ください。$/);   // 配信停止は返信で受け付ける
+  assert.match(m.body_text, /\*\n\n今後このような/);   // 署名と配信停止の案内の間は1行あける
 });

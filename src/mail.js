@@ -20,7 +20,7 @@ export const UNSUBSCRIBE_NOTE = '今後このようなご案内が不要な場�
 
 export function footer() {
   const line = '************************************************';
-  return ['', line, ...config.footer.signature, line, UNSUBSCRIBE_NOTE].join('\n');
+  return ['', line, ...config.footer.signature, line, '', UNSUBSCRIBE_NOTE].join('\n');
 }
 
 // Power Automate の「共有メールボックスからメールを送信する (V2)」は本文を HTML として送るので、
