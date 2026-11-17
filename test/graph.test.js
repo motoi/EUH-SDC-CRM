@@ -16,18 +16,22 @@ globalThis.fetch = async (url, init) => {
 };
 const { mailer, RetryLater } = await import('../src/mailer.js');
 
-test('共有メールボックスから、送信済みフォルダーに残さずに送る（html があれば HTML で）', async () => {
-  await mailer.send({ to: 'a@example.com', subject: '件名', text: '本文\n2行目', deliveryId: 7 });
+test('共有メールボックスから、UTF-8 のテキストメールをまるごと組み立てて送る', async () => {
+  await mailer.send({ to: 'a@example.com', subject: '件名\nBcc: x@example.com', text: '本文\n2行目', deliveryId: 7 });
   const [tok, send] = calls;
   assert.match(tok.url, /login\.microsoftonline\.com\/tenant-test\/oauth2\/v2\.0\/token/);
   assert.equal(send.url, 'https://graph.microsoft.com/v1.0/users/social-design-center%40eikei.ac.jp/sendMail');
   assert.equal(send.init.headers.Authorization, 'Bearer token-test');
-  const body = JSON.parse(send.init.body);
-  assert.deepEqual(body.message.body, { contentType: 'Text', content: '本文\n2行目' });
-  assert.deepEqual(body.message.toRecipients, [{ emailAddress: { address: 'a@example.com' } }]);
-  assert.equal(body.saveToSentItems, false);
-  await mailer.send({ to: 'a@example.com', subject: '件名', text: '本文', html: '<div lang="ja">本文</div>', deliveryId: 8 });
-  assert.deepEqual(JSON.parse(calls.at(-1).init.body).message.body, { contentType: 'HTML', content: '<div lang="ja">本文</div>' });
+  assert.equal(send.init.headers['Content-Type'], 'text/plain');
+  const [head, body] = Buffer.from(send.init.body, 'base64').toString('utf8').split('\r\n\r\n');
+  const h = head.split('\r\n');
+  assert.ok(h.includes('To: a@example.com'));
+  assert.ok(h.includes('X-SDC-Delivery: 7'));
+  assert.ok(h.includes('Content-Type: text/plain; charset=UTF-8'));
+  assert.equal(h.filter((l) => /^Bcc:/i.test(l)).length, 0);   // 件名に改行を入れてもヘッダーを足せない
+  const subject = h.find((l) => l.startsWith('Subject: ')).match(/=\?UTF-8\?B\?(.+)\?=/)[1];
+  assert.equal(Buffer.from(subject, 'base64').toString('utf8'), '件名 Bcc: x@example.com');
+  assert.equal(Buffer.from(body, 'base64').toString('utf8'), '本文\r\n2行目');
 });
 
 test('混雑（429）のときは、あとでやり直す', async () => {

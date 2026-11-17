@@ -179,7 +179,7 @@ app.post('/:id{[0-9]+}/test', async (c) => {
   const sample = await sampleContact(cp.definition);
   const msg = compose(cp, sample);
   try {
-    await mailer.send({ to, subject: `[テスト] ${msg.subject}`, text: msg.text, html: msg.html, deliveryId: `test-${id}` });
+    await mailer.send({ to, subject: `[テスト] ${msg.subject}`, text: msg.text, deliveryId: `test-${id}` });
   } catch (e) {
     setFlash(c, `テスト送信に失敗しました：${e.message}`, 'bad');
     return c.redirect(`/campaigns/${id}`);
